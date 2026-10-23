@@ -9,6 +9,14 @@ import SwiftUI
 import AVFoundation
 import Combine
 
+private struct PracticeDrillStep: Identifiable {
+    let checkpointID: String
+    let title: String
+    let cue: String
+
+    var id: String { checkpointID }
+}
+
 struct StagePlayView: View {
     let stage: GolfStage
     @Bindable var profile: PlayerProfile
@@ -20,6 +28,8 @@ struct StagePlayView: View {
     @State private var isInteractiveSimulatorMode: Bool = false
     @State private var interactiveSkeleton: PoseSkeleton
     @State private var selectedPreset: SimulationPresetMode = .beginnerMistake
+    @State private var currentDrillStepIndex: Int = 0
+    @State private var completedDrillStepIDs: Set<String> = []
 
     // Hold timer state
     @State private var holdElapsed: Double = 0.0
@@ -34,6 +44,7 @@ struct StagePlayView: View {
     // Quiz state in victory modal
     @State private var selectedQuizOption: Int? = nil
     @State private var hasSubmittedQuiz: Bool = false
+    @State private var hasClaimedReward: Bool = false
 
     private let holdTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
@@ -71,6 +82,71 @@ struct StagePlayView: View {
         )
     }
 
+    private var drillSteps: [PracticeDrillStep] {
+        switch stage.id {
+        case .setup:
+            return [
+                PracticeDrillStep(checkpointID: "setup_stance", title: "站穩底盤", cue: "雙腳張開約與肩同寬，腳掌平均踩穩。"),
+                PracticeDrillStep(checkpointID: "setup_spine", title: "髖部前傾", cue: "從髖關節向前折，背部保持自然挺直。"),
+                PracticeDrillStep(checkpointID: "setup_knee", title: "膝蓋留彈性", cue: "膝蓋微彎但不蹲低，重心留在足弓。")
+            ]
+        case .grip:
+            return [
+                PracticeDrillStep(checkpointID: "grip_v_angle", title: "對準虎口 V", cue: "雙手虎口自然指向右肩與下巴之間。"),
+                PracticeDrillStep(checkpointID: "grip_connection", title: "連結雙手", cue: "依選定握法讓左右手靠攏，握力保持放鬆。"),
+                PracticeDrillStep(checkpointID: "grip_triangle", title: "手臂成三角", cue: "肩膀放鬆，雙手自然垂在身體前方。")
+            ]
+        case .backswing:
+            return [
+                PracticeDrillStep(checkpointID: "backswing_coil", title: "胸口帶動啟動", cue: "先轉動胸口與肩膀，讓手臂跟著身體一起上桿。"),
+                PracticeDrillStep(checkpointID: "backswing_arm", title: "上桿保持寬度", cue: "左手臂自然延伸，不要用手肘折起來抬桿。"),
+                PracticeDrillStep(checkpointID: "backswing_sway", title: "頂點穩住下盤", cue: "右腳內側踩穩，骨盆轉動但不要往右滑。")
+            ]
+        case .impact:
+            return [
+                PracticeDrillStep(checkpointID: "impact_weight", title: "重心移向左腳", cue: "下桿先讓重心回到左腳，避免留在後腳撈球。"),
+                PracticeDrillStep(checkpointID: "impact_lean", title: "雙手領先球位", cue: "擊球時手把略在球前，避免手腕提早翻開。"),
+                PracticeDrillStep(checkpointID: "impact_head", title: "頭部保持穩定", cue: "重心前移時讓頭留在球後，不要跟著往前衝。")
+            ]
+        case .finish:
+            return [
+                PracticeDrillStep(checkpointID: "finish_balance", title: "站穩左腳", cue: "收桿時胸口轉向目標，重心穩定落在左腳。"),
+                PracticeDrillStep(checkpointID: "finish_hands", title: "完成送桿收桿", cue: "順勢送出雙手，最後自然收在左肩上方。"),
+                PracticeDrillStep(checkpointID: "finish_knee", title: "右膝自然靠攏", cue: "右腳跟抬起，以右腳尖輕點地面維持平衡。")
+            ]
+        }
+    }
+
+    private var currentDrillStep: PracticeDrillStep {
+        let safeIndex = max(0, min(currentDrillStepIndex, drillSteps.count - 1))
+        return drillSteps[safeIndex]
+    }
+
+    private var currentDrillCheckpoint: CheckpointResult {
+        evaluation.checkpoints.first(where: { $0.id == currentDrillStep.checkpointID })
+            ?? evaluation.checkpoints[0]
+    }
+
+    private var isCurrentDrillStepPassing: Bool {
+        currentDrillCheckpoint.progress >= 0.86
+    }
+
+    private var currentDrillStepTip: String {
+        isCurrentDrillStepPassing
+            ? "這一步達標了，保持姿勢直到計時完成。"
+            : currentDrillCheckpoint.correctionTip
+    }
+
+    private var currentDrillEvaluation: StageEvaluationSummary {
+        StageEvaluationSummary(
+            stageID: stage.id,
+            checkpoints: [currentDrillCheckpoint],
+            overallAccuracy: currentDrillCheckpoint.progress * 100.0,
+            primaryCoachTip: currentDrillStepTip,
+            isAllPassing: isCurrentDrillStepPassing
+        )
+    }
+
     private var holdProgress: Double {
         min(1.0, holdElapsed / max(0.5, stage.holdDurationRequired))
     }
@@ -88,6 +164,8 @@ struct StagePlayView: View {
                 if stage.id == .grip {
                     gripStylePickerBar
                 }
+
+                practiceDrillCard
 
                 // 3. Camera / Interactive Skeleton Viewport
                 viewportSection
@@ -115,7 +193,7 @@ struct StagePlayView: View {
             if poseDetector.authorizationState == .unavailable || poseDetector.authorizationState == .denied {
                 isInteractiveSimulatorMode = true
             }
-            speakCoachTipIfNeeded(evaluation.primaryCoachTip, force: true)
+            speakCoachTipIfNeeded(currentDrillStepTip, force: true)
         }
         .onDisappear {
             poseDetector.stopSession()
@@ -124,16 +202,16 @@ struct StagePlayView: View {
         .onReceive(holdTimer) { _ in
             guard !isStageCleared else { return }
             let canAdvanceHold = isInteractiveSimulatorMode || poseDetector.isHumanDetected
-            if canAdvanceHold && evaluation.isAllPassing {
+            if canAdvanceHold && isCurrentDrillStepPassing {
                 holdElapsed += 0.1
                 if holdElapsed >= stage.holdDurationRequired {
-                    triggerStageClear()
+                    completeCurrentDrillStep()
                 }
             } else {
                 holdElapsed = max(0.0, holdElapsed - 0.15)
             }
         }
-        .onChange(of: evaluation.primaryCoachTip) { _, newTip in
+        .onChange(of: currentDrillStepTip) { _, newTip in
             speakCoachTipIfNeeded(newTip, force: false)
         }
         .sheet(isPresented: $showComparisonSheet) {
@@ -173,7 +251,7 @@ struct StagePlayView: View {
                 if !isVoiceCoachEnabled {
                     speechSynthesizer.stopSpeaking(at: .immediate)
                 } else {
-                    speakCoachTipIfNeeded(evaluation.primaryCoachTip, force: true)
+                    speakCoachTipIfNeeded(currentDrillStepTip, force: true)
                 }
             } label: {
                 Image(systemName: isVoiceCoachEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
@@ -250,6 +328,79 @@ struct StagePlayView: View {
         }
     }
 
+    private var practiceDrillCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("分解練習", systemImage: "figure.golf")
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(stage.themeColor)
+                Spacer()
+                Text("第 \(currentDrillStepIndex + 1) / \(drillSteps.count) 步")
+                    .font(.caption2.monospacedDigit().weight(.bold))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+
+            HStack(spacing: 6) {
+                ForEach(drillSteps.indices, id: \.self) { index in
+                    let step = drillSteps[index]
+                    let isCompleted = completedDrillStepIDs.contains(step.id)
+                    let isCurrent = index == currentDrillStepIndex
+
+                    Button {
+                        guard index <= currentDrillStepIndex else { return }
+                        withAnimation(.spring(duration: 0.28)) {
+                            currentDrillStepIndex = index
+                            holdElapsed = 0
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 11, weight: .bold))
+                            Text(step.title)
+                                .font(.system(size: 10, weight: .bold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 7)
+                        .background(
+                            isCurrent ? stage.themeColor.opacity(0.82) : Color.white.opacity(isCompleted ? 0.12 : 0.06),
+                            in: Capsule()
+                        )
+                        .foregroundStyle(isCurrent ? .white : .white.opacity(isCompleted ? 0.8 : 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(index > currentDrillStepIndex)
+                    .accessibilityLabel("第 \(index + 1) 步：\(step.title)")
+                    .accessibilityAddTraits(isCurrent ? .isSelected : [])
+                }
+            }
+
+            HStack(alignment: .top, spacing: 7) {
+                Image(systemName: isCurrentDrillStepPassing ? "checkmark.circle.fill" : "lightbulb.fill")
+                    .foregroundStyle(isCurrentDrillStepPassing ? .green : .yellow)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(currentDrillStep.title)
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(.white)
+                    Text(currentDrillStep.cue)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(stage.themeColor.opacity(0.28), lineWidth: 1)
+        )
+    }
+
     // MARK: - Main Camera / Skeleton Viewport
 
     private var viewportSection: some View {
@@ -262,25 +413,25 @@ struct StagePlayView: View {
                             .stroke(Color.white.opacity(0.2), lineWidth: 3.5)
                             .frame(width: 30, height: 30)
                         Circle()
-                            .trim(from: 0, to: evaluation.overallAccuracy / 100.0)
+                            .trim(from: 0, to: currentDrillCheckpoint.progress)
                             .stroke(
-                                evaluation.isAllPassing ? Color.green : Color.orange,
+                                isCurrentDrillStepPassing ? Color.green : Color.orange,
                                 style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
                             )
                             .rotationEffect(.degrees(-90))
                             .frame(width: 30, height: 30)
-                        Text("\(Int(evaluation.overallAccuracy))")
+                        Text("\(Int(currentDrillCheckpoint.progress * 100))")
                             .font(.caption2.weight(.heavy))
                             .foregroundStyle(.white)
                     }
 
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("姿勢吻合度")
+                        Text("本步吻合度")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.white.opacity(0.70))
-                        Text(evaluation.isAllPassing ? "完美達標！" : "調整中...")
+                        Text(isCurrentDrillStepPassing ? "本步達標！" : "調整中...")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(evaluation.isAllPassing ? .green : .orange)
+                            .foregroundStyle(isCurrentDrillStepPassing ? .green : .orange)
                     }
                 }
 
@@ -310,9 +461,9 @@ struct StagePlayView: View {
                                 .stroke(Color.green, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
                                 .rotationEffect(.degrees(-90))
                                 .frame(width: 28, height: 28)
-                            Image(systemName: evaluation.isAllPassing ? "timer" : "lock.fill")
+                            Image(systemName: isCurrentDrillStepPassing ? "timer" : "lock.fill")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(evaluation.isAllPassing ? .green : .white.opacity(0.7))
+                                .foregroundStyle(isCurrentDrillStepPassing ? .green : .white.opacity(0.7))
                         }
                         VStack(alignment: .leading, spacing: 0) {
                             Text("定格維持")
@@ -345,7 +496,7 @@ struct StagePlayView: View {
                         }
                     ),
                     idealSkeleton: idealSkeleton,
-                    evaluation: evaluation,
+                    evaluation: currentDrillEvaluation,
                     isInteractiveMode: isInteractiveSimulatorMode,
                     onJointDragged: {
                         profile.totalCorrectionsCount += 1
@@ -395,21 +546,21 @@ struct StagePlayView: View {
             // Bottom Dedicated Coach Feedback Bar (Non-overlapping with golfer feet & ball)
             HStack(alignment: .center, spacing: 10) {
                 Circle()
-                    .fill(evaluation.isAllPassing ? Color.green : Color(red: 1.0, green: 0.23, blue: 0.36))
+                    .fill(isCurrentDrillStepPassing ? Color.green : Color(red: 1.0, green: 0.23, blue: 0.36))
                     .frame(width: 9, height: 9)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text("AI 高球教練即時指導")
                             .font(.system(size: 11, weight: .heavy))
-                            .foregroundStyle(evaluation.isAllPassing ? .green : .yellow)
+                            .foregroundStyle(isCurrentDrillStepPassing ? .green : .yellow)
                         if isInteractiveSimulatorMode {
                             Text("• 可直接拖曳白色支點或點選下方預設姿勢")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.65))
                         }
                     }
-                    Text(evaluation.primaryCoachTip)
+                    Text(currentDrillStepTip)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
@@ -450,6 +601,7 @@ struct StagePlayView: View {
                         withAnimation(.spring(duration: 0.45)) {
                             selectedPreset = mode
                             interactiveSkeleton = PostureEvaluator.presetSkeleton(for: stage.id, mode: mode)
+                            holdElapsed = 0
                             profile.totalCorrectionsCount += 1
                         }
                     } label: {
@@ -504,10 +656,14 @@ struct StagePlayView: View {
     private var checkpointsDashboard: some View {
         VStack(spacing: 6) {
             ForEach(evaluation.checkpoints) { item in
+                let isCompleted = completedDrillStepIDs.contains(item.id)
+                let isCurrent = currentDrillStep.id == item.id
+                let displayedProgress = isCompleted ? 1.0 : item.progress
+
                 HStack(spacing: 10) {
-                    Image(systemName: item.status.iconName)
+                    Image(systemName: isCompleted ? "checkmark.circle.fill" : item.status.iconName)
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(item.status.color)
+                        .foregroundStyle(isCompleted ? .green : item.status.color)
                         .frame(width: 24)
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -516,9 +672,9 @@ struct StagePlayView: View {
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.white)
                             Spacer()
-                            Text("目前：\(item.currentValueText)")
+                            Text(isCompleted ? "本步已達標" : "目前：\(item.currentValueText)")
                                 .font(.caption.monospacedDigit().weight(.bold))
-                                .foregroundStyle(item.status.color)
+                                .foregroundStyle(isCompleted ? .green : item.status.color)
                             Text("/ 目標 \(item.targetValueText)")
                                 .font(.caption2)
                                 .foregroundStyle(.white.opacity(0.6))
@@ -529,23 +685,26 @@ struct StagePlayView: View {
                                 Capsule()
                                     .fill(Color.white.opacity(0.14))
                                 Capsule()
-                                    .fill(item.status.color.gradient)
-                                    .frame(width: barGeo.size.width * item.progress)
+                                    .fill((isCompleted ? Color.green : item.status.color).gradient)
+                                    .frame(width: barGeo.size.width * max(0.0, min(1.0, displayedProgress)))
                             }
                         }
                         .frame(height: 6)
                     }
 
-                    Text(item.status.badgeText)
+                    Text(isCompleted ? "已完成" : (isCurrent ? "本步" : item.status.badgeText))
                         .font(.system(size: 10, weight: .heavy))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(item.status.color.opacity(0.85), in: Capsule())
+                        .background((isCompleted ? Color.green : (isCurrent ? stage.themeColor : item.status.color)).opacity(0.85), in: Capsule())
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                .background(
+                    (isCurrent ? stage.themeColor.opacity(0.12) : Color.white.opacity(0.08)),
+                    in: RoundedRectangle(cornerRadius: 14)
+                )
             }
         }
     }
@@ -669,8 +828,11 @@ struct StagePlayView: View {
                             withAnimation {
                                 isStageCleared = false
                                 holdElapsed = 0
+                                currentDrillStepIndex = 0
+                                completedDrillStepIDs = []
                                 selectedQuizOption = nil
                                 hasSubmittedQuiz = false
+                                hasClaimedReward = false
                                 selectedPreset = .beginnerMistake
                                 interactiveSkeleton = PostureEvaluator.presetSkeleton(for: stage.id, mode: .beginnerMistake)
                             }
@@ -684,6 +846,8 @@ struct StagePlayView: View {
                         }
 
                         Button {
+                            guard !hasClaimedReward else { return }
+                            hasClaimedReward = true
                             onStageCompleted(
                                 earnedStars,
                                 evaluation.overallAccuracy,
@@ -699,6 +863,7 @@ struct StagePlayView: View {
                                 .background(stage.themeColor.gradient, in: RoundedRectangle(cornerRadius: 16))
                                 .foregroundStyle(.white)
                         }
+                        .disabled(hasClaimedReward)
                     }
                 }
                 .padding(22)
@@ -716,6 +881,20 @@ struct StagePlayView: View {
     }
 
     // MARK: - Helpers
+
+    private func completeCurrentDrillStep() {
+        completedDrillStepIDs.insert(currentDrillStep.id)
+
+        if currentDrillStepIndex + 1 < drillSteps.count {
+            withAnimation(.spring(duration: 0.35)) {
+                currentDrillStepIndex += 1
+                holdElapsed = 0
+            }
+            speakCoachTipIfNeeded("下一步：\(currentDrillStep.title)。\(currentDrillStep.cue)", force: true)
+        } else {
+            triggerStageClear()
+        }
+    }
 
     private func triggerStageClear() {
         withAnimation(.spring(duration: 0.5)) {

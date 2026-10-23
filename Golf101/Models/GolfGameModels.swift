@@ -395,6 +395,105 @@ struct GolfStage: Identifiable {
     }
 }
 
+// MARK: - Practice & Clearance Badges
+
+struct PracticeBadge: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let englishSubtitle: String
+    let description: String
+    let requiredSessions: Int
+    let requiresAllStagesCleared: Bool
+    let iconName: String
+    let accentColors: [Color]
+
+    func isUnlocked(totalSessions: Int, clearedStagesCount: Int) -> Bool {
+        let safeSessions = max(0, totalSessions)
+        let safeCleared = max(0, clearedStagesCount)
+        if requiresAllStagesCleared && safeCleared >= 5 {
+            return true
+        }
+        return safeSessions >= requiredSessions
+    }
+
+    func progress(totalSessions: Int, clearedStagesCount: Int) -> Double {
+        if isUnlocked(totalSessions: totalSessions, clearedStagesCount: clearedStagesCount) {
+            return 1.0
+        }
+        let safeSessions = max(0, totalSessions)
+        return min(1.0, max(0.0, Double(safeSessions) / Double(max(1, requiredSessions))))
+    }
+
+    func progressLabel(totalSessions: Int, clearedStagesCount: Int) -> String {
+        if isUnlocked(totalSessions: totalSessions, clearedStagesCount: clearedStagesCount) {
+            return "已解鎖"
+        }
+        let safeSessions = max(0, totalSessions)
+        return "\(safeSessions) / \(requiredSessions) 次練習"
+    }
+
+    static let allBadges: [PracticeBadge] = [
+        PracticeBadge(
+            id: "badge_first_tee",
+            title: "初踏果嶺銅章",
+            englishSubtitle: "FIRST TEE ROOKIE",
+            description: "完成第 1 次姿勢訂正練習，正式開啟高爾夫揮桿進化之路！",
+            requiredSessions: 1,
+            requiresAllStagesCleared: false,
+            iconName: "flag.fill",
+            accentColors: [Color(red: 0.80, green: 0.52, blue: 0.32), Color(red: 0.62, green: 0.36, blue: 0.20)]
+        ),
+        PracticeBadge(
+            id: "badge_range_regular",
+            title: "鐵桿練習生銀章",
+            englishSubtitle: "RANGE REGULAR",
+            description: "累計完成 3 次練習通關，站姿與握桿肌肉記憶逐漸成形。",
+            requiredSessions: 3,
+            requiresAllStagesCleared: false,
+            iconName: "figure.golf",
+            accentColors: [Color(red: 0.75, green: 0.82, blue: 0.90), Color(red: 0.50, green: 0.58, blue: 0.68)]
+        ),
+        PracticeBadge(
+            id: "badge_fairway_breaker",
+            title: "球道突破者金章",
+            englishSubtitle: "FAIRWAY BREAKER",
+            description: "累計完成 5 次練習通關，徹底告別雞翅膀與重心搖晃！",
+            requiredSessions: 5,
+            requiresAllStagesCleared: false,
+            iconName: "medal.fill",
+            accentColors: [Color(red: 0.98, green: 0.78, blue: 0.22), Color(red: 0.88, green: 0.52, blue: 0.12)]
+        ),
+        PracticeBadge(
+            id: "badge_golden_swing",
+            title: "翡翠揮桿大師章",
+            englishSubtitle: "EMERALD SWING PRO",
+            description: "累計完成 10 次練習通關，上桿蓄力與下桿釋放如行雲流水。",
+            requiredSessions: 10,
+            requiresAllStagesCleared: false,
+            iconName: "sparkles",
+            accentColors: [Color(red: 0.16, green: 0.85, blue: 0.56), Color(red: 0.08, green: 0.55, blue: 0.42)]
+        ),
+        PracticeBadge(
+            id: "badge_grand_slam",
+            title: "大滿貫傳奇王冠",
+            englishSubtitle: "GRAND SLAM LEGEND",
+            description: "累計完成 20 次練習或全數通過 5 大關卡，榮登高球學院最高殿堂！",
+            requiredSessions: 20,
+            requiresAllStagesCleared: true,
+            iconName: "crown.fill",
+            accentColors: [Color(red: 0.68, green: 0.42, blue: 0.98), Color(red: 0.96, green: 0.36, blue: 0.62)]
+        )
+    ]
+
+    static func highestUnlocked(totalSessions: Int, clearedStagesCount: Int) -> PracticeBadge? {
+        allBadges.last(where: { $0.isUnlocked(totalSessions: totalSessions, clearedStagesCount: clearedStagesCount) })
+    }
+
+    static func nextTargetBadge(totalSessions: Int, clearedStagesCount: Int) -> PracticeBadge? {
+        allBadges.first(where: { !$0.isUnlocked(totalSessions: totalSessions, clearedStagesCount: clearedStagesCount) })
+    }
+}
+
 // MARK: - SwiftData Persistence Models
 
 @Model
@@ -430,6 +529,10 @@ final class StageRecord {
 @Model
 final class PlayerProfile {
     var playerName: String
+    var playerBio: String
+    var avatarSymbol: String
+    var hasCompletedOnboarding: Bool
+    var totalPracticeSessions: Int
     var totalXP: Int
     var preferredGripRaw: String
     var isLeftHanded: Bool
@@ -438,6 +541,10 @@ final class PlayerProfile {
 
     init(
         playerName: String = "高球新星",
+        playerBio: String = "目標建立穩定站姿與黃金揮桿平面，朝破百邁進！",
+        avatarSymbol: String = "figure.golf",
+        hasCompletedOnboarding: Bool = false,
+        totalPracticeSessions: Int = 0,
         totalXP: Int = 0,
         preferredGripRaw: String = GripStyle.overlap.rawValue,
         isLeftHanded: Bool = false,
@@ -445,11 +552,35 @@ final class PlayerProfile {
         createdAt: Date = .now
     ) {
         self.playerName = playerName
+        self.playerBio = playerBio
+        self.avatarSymbol = avatarSymbol
+        self.hasCompletedOnboarding = hasCompletedOnboarding
+        self.totalPracticeSessions = totalPracticeSessions
         self.totalXP = totalXP
         self.preferredGripRaw = preferredGripRaw
         self.isLeftHanded = isLeftHanded
         self.totalCorrectionsCount = totalCorrectionsCount
         self.createdAt = createdAt
+    }
+
+    static let defaultPlayerName = "高球新星"
+    static let defaultPlayerBio = "目標建立穩定站姿與黃金揮桿平面，朝破百邁進！"
+
+    static func sanitizeName(_ rawName: String) -> String {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? defaultPlayerName : trimmed
+    }
+
+    static func sanitizeBio(_ rawBio: String) -> String {
+        let trimmed = rawBio.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? defaultPlayerBio : trimmed
+    }
+
+    func applyLoginProfile(name: String, bio: String, avatar: String) {
+        self.playerName = Self.sanitizeName(name)
+        self.playerBio = Self.sanitizeBio(bio)
+        self.avatarSymbol = avatar.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "figure.golf" : avatar
+        self.hasCompletedOnboarding = true
     }
 
     var preferredGrip: GripStyle {
@@ -458,15 +589,15 @@ final class PlayerProfile {
     }
 
     var level: Int {
-        max(1, (totalXP / 250) + 1)
+        max(1, (max(0, totalXP) / 250) + 1)
     }
 
     var currentLevelProgress: Double {
-        Double(totalXP % 250) / 250.0
+        Double(max(0, totalXP) % 250) / 250.0
     }
 
     var xpToNextLevel: Int {
-        250 - (totalXP % 250)
+        250 - (max(0, totalXP) % 250)
     }
 
     var rankTitle: String {

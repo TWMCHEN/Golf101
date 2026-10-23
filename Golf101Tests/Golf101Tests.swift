@@ -106,21 +106,65 @@ struct Golf101Tests {
             )
             #expect(!result.overallAccuracy.isNaN)
             #expect(result.checkpoints.count == 3)
+            #expect(!result.isAllPassing, "關卡 \(stageID) 不應用預設關節位置把空骨架判成通過")
+            #expect(result.checkpoints.allSatisfy { $0.status == .needsCorrection })
         }
     }
 
-    @Test("玩家經驗值升級與稱號晉升邏輯")
-    func playerProfileLevelAndRankProgression() async throws {
-        let profile = PlayerProfile(playerName: "測試球員", totalXP: 0)
+    @Test("玩家經驗值升級、登入簡介與練習次數通關徽章解鎖邏輯")
+    func playerProfileLevelBadgeAndLoginProgression() async throws {
+        let profile = PlayerProfile(
+            playerName: "Mike Chen",
+            playerBio: "目標三個月破百",
+            avatarSymbol: "trophy.fill",
+            hasCompletedOnboarding: true,
+            totalPracticeSessions: 0,
+            totalXP: 0
+        )
         #expect(profile.level == 1)
         #expect(profile.rankTitle.contains("初心者"))
+        #expect(PracticeBadge.highestUnlocked(totalSessions: profile.totalPracticeSessions, clearedStagesCount: 0) == nil)
 
+        // Complete 1 session -> unlocks First Tee Rookie badge
+        profile.totalPracticeSessions = 1
         profile.totalXP = 250
         #expect(profile.level == 2)
-        #expect(profile.xpToNextLevel == 250)
+        #expect(PracticeBadge.highestUnlocked(totalSessions: profile.totalPracticeSessions, clearedStagesCount: 1)?.id == "badge_first_tee")
 
+        // Complete 5 sessions -> unlocks Fairway Breaker Gold badge
+        profile.totalPracticeSessions = 5
+        #expect(PracticeBadge.highestUnlocked(totalSessions: profile.totalPracticeSessions, clearedStagesCount: 3)?.id == "badge_fairway_breaker")
+
+        // Complete 20 sessions -> unlocks Grand Slam Legend badge
+        profile.totalPracticeSessions = 20
         profile.totalXP = 1050
         #expect(profile.level == 5)
         #expect(profile.rankTitle.contains("大師"))
+        #expect(PracticeBadge.highestUnlocked(totalSessions: profile.totalPracticeSessions, clearedStagesCount: 5)?.id == "badge_grand_slam")
+        #expect(PracticeBadge.nextTargetBadge(totalSessions: profile.totalPracticeSessions, clearedStagesCount: 5) == nil)
+
+        // Blank nickname & bio fallback sanitization
+        profile.applyLoginProfile(name: "   \n ", bio: "   ", avatar: "  ")
+        #expect(profile.playerName == PlayerProfile.defaultPlayerName)
+        #expect(profile.playerBio == PlayerProfile.defaultPlayerBio)
+        #expect(profile.avatarSymbol == "figure.golf")
+
+        // Negative XP & negative session defensive clamping
+        profile.totalXP = -120
+        #expect(profile.level == 1)
+        #expect(profile.currentLevelProgress >= 0.0)
+        #expect(PracticeBadge.allBadges[0].progress(totalSessions: -3, clearedStagesCount: 0) == 0.0)
+        #expect(PracticeBadge.allBadges[0].progressLabel(totalSessions: -3, clearedStagesCount: 0) == "0 / 1 次練習")
+    }
+
+    @Test("低信心度關節點過濾測試：信心度低於 0.15 的關節應被安全攔截")
+    func lowConfidenceJointFiltering() async throws {
+        var lowConfSkeleton = PostureEvaluator.presetSkeleton(for: .setup, mode: .idealPro)
+        lowConfSkeleton.confidences[.leftAnkle] = 0.05
+        lowConfSkeleton.confidences[.rightAnkle] = 0.08
+        #expect(lowConfSkeleton.point(for: .leftAnkle) == nil)
+        let eval = PostureEvaluator.evaluate(skeleton: lowConfSkeleton, stageID: .setup, gripStyle: .overlap)
+        #expect(!eval.isAllPassing)
+        #expect(eval.checkpoints.allSatisfy { $0.status == .needsCorrection })
     }
 }

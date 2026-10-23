@@ -235,7 +235,7 @@ struct SkeletonOverlayView: View {
             let unit = min(w, h) * figureScale
 
             func pt(_ j: SkeletonJoint) -> CGPoint? {
-                guard let norm = skeleton.joints[j] else { return nil }
+                guard let norm = skeleton.point(for: j) else { return nil }
                 return project(norm, in: canvasSize)
             }
 
@@ -407,7 +407,7 @@ struct SkeletonOverlayView: View {
     private func kinematicSkeletonAndNodesLayer(size: CGSize) -> some View {
         Canvas { context, canvasSize in
             func pt(_ j: SkeletonJoint) -> CGPoint? {
-                guard let norm = currentSkeleton.joints[j] else { return nil }
+                guard let norm = currentSkeleton.point(for: j) else { return nil }
                 return project(norm, in: canvasSize)
             }
 
@@ -568,7 +568,7 @@ struct SkeletonOverlayView: View {
         let activeChecks = evaluation.checkpoints.prefix(2)
         for (idx, cp) in activeChecks.enumerated() {
             let joint = cp.highlightedJoints.first ?? .leftElbow
-            guard let normPt = currentSkeleton.joints[joint] else { continue }
+            guard let normPt = currentSkeleton.point(for: joint) else { continue }
             let anchor = project(normPt, in: size)
             let isLeft = idx == 0
 
@@ -601,7 +601,8 @@ struct SkeletonOverlayView: View {
     private func nearestJoint(to normalizedPoint: CGPoint, in skeleton: PoseSkeleton) -> SkeletonJoint? {
         var bestJoint: SkeletonJoint?
         var bestDist: CGFloat = 0.14
-        for (joint, pt) in skeleton.joints {
+        for joint in SkeletonJoint.allCases {
+            guard let pt = skeleton.point(for: joint) else { continue }
             let d = hypot(pt.x - normalizedPoint.x, pt.y - normalizedPoint.y)
             if d < bestDist {
                 bestDist = d

@@ -82,6 +82,25 @@ struct TestRunner {
         let emptySkel = PoseSkeleton(joints: [:], confidences: [:])
         let emptyEval = PostureEvaluator.evaluate(skeleton: emptySkel, stageID: .setup, gripStyle: .overlap)
         check(!emptyEval.overallAccuracy.isNaN && emptyEval.checkpoints.count == 3, "空骨架防禦測試通過 (無崩潰或 NaN)")
+        check(!emptyEval.isAllPassing && emptyEval.checkpoints.allSatisfy({ $0.status == .needsCorrection }), "空骨架正確攔截並標記為需調整")
+
+        var lowConfSkel = PostureEvaluator.presetSkeleton(for: .setup, mode: .idealPro)
+        lowConfSkel.confidences[.leftAnkle] = 0.05
+        let lowConfEval = PostureEvaluator.evaluate(skeleton: lowConfSkel, stageID: .setup, gripStyle: .overlap)
+        check(!lowConfEval.isAllPassing, "低信心度關節 (< 0.15) 成功被過濾並攔截")
+
+        // 4. Player Login & Practice Clearance Badges Verification
+        print("\n[球員登入簡介與練習通關徽章驗證]")
+        check(PracticeBadge.highestUnlocked(totalSessions: 0, clearedStagesCount: 0) == nil, "0 次練習時尚未解鎖徽章")
+        check(PracticeBadge.highestUnlocked(totalSessions: 1, clearedStagesCount: 1)?.id == "badge_first_tee", "1 次練習解鎖「初踏果嶺銅章」")
+        check(PracticeBadge.highestUnlocked(totalSessions: 3, clearedStagesCount: 2)?.id == "badge_range_regular", "3 次練習解鎖「鐵桿練習生銀章」")
+        check(PracticeBadge.highestUnlocked(totalSessions: 5, clearedStagesCount: 3)?.id == "badge_fairway_breaker", "5 次練習解鎖「球道突破者金章」")
+        check(PracticeBadge.highestUnlocked(totalSessions: 10, clearedStagesCount: 4)?.id == "badge_golden_swing", "10 次練習解鎖「翡翠揮桿大師章」")
+        check(PracticeBadge.highestUnlocked(totalSessions: 20, clearedStagesCount: 5)?.id == "badge_grand_slam", "20 次練習解鎖「大滿貫傳奇王冠」")
+        check(PracticeBadge.allBadges[4].isUnlocked(totalSessions: 5, clearedStagesCount: 5), "全數通過 5 大關卡亦可解鎖「大滿貫傳奇王冠」")
+        check(PlayerProfile.sanitizeName("   \n ") == PlayerProfile.defaultPlayerName, "空白暱稱自動回退預設名稱「高球新星」")
+        check(PlayerProfile.sanitizeBio("   ") == PlayerProfile.defaultPlayerBio, "空白簡介自動回退預設目標簡介")
+        check(PracticeBadge.allBadges[0].progress(totalSessions: -5, clearedStagesCount: 0) == 0.0, "負數練習次數邊界保護通過 (進度 = 0.0)")
 
         print("\n==============================================")
         print("總計通過: \(passedCount) 項 | 失敗: \(failedCount) 項")

@@ -25,19 +25,35 @@ struct PostureEvaluator {
         stageID: GolfStageID,
         gripStyle: GripStyle
     ) -> StageEvaluationSummary {
-        let checkpoints: [CheckpointResult]
+        let evaluatedCheckpoints: [CheckpointResult]
         switch stageID {
         case .setup:
-            checkpoints = evaluateSetup(skeleton: skeleton)
+            evaluatedCheckpoints = evaluateSetup(skeleton: skeleton)
         case .grip:
-            checkpoints = evaluateGrip(skeleton: skeleton, gripStyle: gripStyle)
+            evaluatedCheckpoints = evaluateGrip(skeleton: skeleton, gripStyle: gripStyle)
         case .backswing:
-            checkpoints = evaluateBackswing(skeleton: skeleton)
+            evaluatedCheckpoints = evaluateBackswing(skeleton: skeleton)
         case .impact:
-            checkpoints = evaluateImpact(skeleton: skeleton)
+            evaluatedCheckpoints = evaluateImpact(skeleton: skeleton)
         case .finish:
-            checkpoints = evaluateFinish(skeleton: skeleton)
+            evaluatedCheckpoints = evaluateFinish(skeleton: skeleton)
         }
+
+        let missingJoints = requiredJoints(for: stageID).filter { skeleton.point(for: $0) == nil }
+        let checkpoints = missingJoints.isEmpty
+            ? evaluatedCheckpoints
+            : evaluatedCheckpoints.map { checkpoint in
+                CheckpointResult(
+                    id: checkpoint.id,
+                    title: checkpoint.title,
+                    currentValueText: "偵測中",
+                    targetValueText: checkpoint.targetValueText,
+                    progress: 0.0,
+                    status: .needsCorrection,
+                    correctionTip: "尚未完整偵測到身體關節，請調整站位並讓全身清楚入鏡。",
+                    highlightedJoints: checkpoint.highlightedJoints
+                )
+            }
 
         let avgProgress = checkpoints.map(\.progress).reduce(0, +) / Double(max(1, checkpoints.count))
         let overallAccuracy = min(100.0, max(0.0, avgProgress * 100.0))
@@ -61,19 +77,35 @@ struct PostureEvaluator {
         )
     }
 
+    private static func requiredJoints(for stageID: GolfStageID) -> [SkeletonJoint] {
+        switch stageID {
+        case .setup:
+            return [.leftShoulder, .rightShoulder, .leftAnkle, .rightAnkle, .neck, .root,
+                    .leftHip, .rightHip, .leftKnee, .rightKnee]
+        case .grip:
+            return [.leftShoulder, .rightShoulder, .leftWrist, .rightWrist, .neck]
+        case .backswing:
+            return [.leftShoulder, .rightShoulder, .leftElbow, .leftWrist, .rightHip, .rightAnkle]
+        case .impact:
+            return [.nose, .root, .leftAnkle, .rightAnkle, .leftWrist]
+        case .finish:
+            return [.neck, .root, .leftAnkle, .leftShoulder, .leftWrist, .rightKnee, .leftKnee]
+        }
+    }
+
     // MARK: - Stage 1: Setup & Posture
 
     private static func evaluateSetup(skeleton: PoseSkeleton) -> [CheckpointResult] {
-        let lShoulder = skeleton.joints[.leftShoulder] ?? CGPoint(x: 0.40, y: 0.30)
-        let rShoulder = skeleton.joints[.rightShoulder] ?? CGPoint(x: 0.60, y: 0.30)
-        let lAnkle = skeleton.joints[.leftAnkle] ?? CGPoint(x: 0.38, y: 0.84)
-        let rAnkle = skeleton.joints[.rightAnkle] ?? CGPoint(x: 0.62, y: 0.84)
-        let neck = skeleton.joints[.neck] ?? CGPoint(x: 0.50, y: 0.25)
-        let root = skeleton.joints[.root] ?? CGPoint(x: 0.50, y: 0.54)
-        let lHip = skeleton.joints[.leftHip] ?? CGPoint(x: 0.44, y: 0.54)
-        let lKnee = skeleton.joints[.leftKnee] ?? CGPoint(x: 0.41, y: 0.70)
-        let rHip = skeleton.joints[.rightHip] ?? CGPoint(x: 0.56, y: 0.54)
-        let rKnee = skeleton.joints[.rightKnee] ?? CGPoint(x: 0.59, y: 0.70)
+        let lShoulder = skeleton.point(for: .leftShoulder) ?? CGPoint(x: 0.40, y: 0.30)
+        let rShoulder = skeleton.point(for: .rightShoulder) ?? CGPoint(x: 0.60, y: 0.30)
+        let lAnkle = skeleton.point(for: .leftAnkle) ?? CGPoint(x: 0.38, y: 0.84)
+        let rAnkle = skeleton.point(for: .rightAnkle) ?? CGPoint(x: 0.62, y: 0.84)
+        let neck = skeleton.point(for: .neck) ?? CGPoint(x: 0.50, y: 0.25)
+        let root = skeleton.point(for: .root) ?? CGPoint(x: 0.50, y: 0.54)
+        let lHip = skeleton.point(for: .leftHip) ?? CGPoint(x: 0.44, y: 0.54)
+        let lKnee = skeleton.point(for: .leftKnee) ?? CGPoint(x: 0.41, y: 0.70)
+        let rHip = skeleton.point(for: .rightHip) ?? CGPoint(x: 0.56, y: 0.54)
+        let rKnee = skeleton.point(for: .rightKnee) ?? CGPoint(x: 0.59, y: 0.70)
 
         // 1. Stance Width Ratio (ankle span vs shoulder span)
         let shoulderWidth = max(0.06, abs(rShoulder.x - lShoulder.x))
@@ -140,11 +172,11 @@ struct PostureEvaluator {
     // MARK: - Stage 2: Grip Mastery
 
     private static func evaluateGrip(skeleton: PoseSkeleton, gripStyle: GripStyle) -> [CheckpointResult] {
-        let lShoulder = skeleton.joints[.leftShoulder] ?? CGPoint(x: 0.39, y: 0.30)
-        let rShoulder = skeleton.joints[.rightShoulder] ?? CGPoint(x: 0.61, y: 0.31)
-        let lWrist = skeleton.joints[.leftWrist] ?? CGPoint(x: 0.48, y: 0.52)
-        let rWrist = skeleton.joints[.rightWrist] ?? CGPoint(x: 0.51, y: 0.53)
-        let neck = skeleton.joints[.neck] ?? CGPoint(x: 0.50, y: 0.25)
+        let lShoulder = skeleton.point(for: .leftShoulder) ?? CGPoint(x: 0.39, y: 0.30)
+        let rShoulder = skeleton.point(for: .rightShoulder) ?? CGPoint(x: 0.61, y: 0.31)
+        let lWrist = skeleton.point(for: .leftWrist) ?? CGPoint(x: 0.48, y: 0.52)
+        let rWrist = skeleton.point(for: .rightWrist) ?? CGPoint(x: 0.51, y: 0.53)
+        let neck = skeleton.point(for: .neck) ?? CGPoint(x: 0.50, y: 0.25)
 
         // 1. Hands Connection (Wrist proximity + handConnectionScore)
         let shoulderWidth = max(0.08, hypot(rShoulder.x - lShoulder.x, rShoulder.y - lShoulder.y))
@@ -209,12 +241,12 @@ struct PostureEvaluator {
     // MARK: - Stage 3: Backswing & Coil
 
     private static func evaluateBackswing(skeleton: PoseSkeleton) -> [CheckpointResult] {
-        let lShoulder = skeleton.joints[.leftShoulder] ?? CGPoint(x: 0.48, y: 0.31)
-        let rShoulder = skeleton.joints[.rightShoulder] ?? CGPoint(x: 0.62, y: 0.28)
-        let lElbow = skeleton.joints[.leftElbow] ?? CGPoint(x: 0.56, y: 0.26)
-        let lWrist = skeleton.joints[.leftWrist] ?? CGPoint(x: 0.65, y: 0.20)
-        let rHip = skeleton.joints[.rightHip] ?? CGPoint(x: 0.57, y: 0.54)
-        let rAnkle = skeleton.joints[.rightAnkle] ?? CGPoint(x: 0.61, y: 0.84)
+        let lShoulder = skeleton.point(for: .leftShoulder) ?? CGPoint(x: 0.48, y: 0.31)
+        let rShoulder = skeleton.point(for: .rightShoulder) ?? CGPoint(x: 0.62, y: 0.28)
+        let lElbow = skeleton.point(for: .leftElbow) ?? CGPoint(x: 0.56, y: 0.26)
+        let lWrist = skeleton.point(for: .leftWrist) ?? CGPoint(x: 0.65, y: 0.20)
+        let rHip = skeleton.point(for: .rightHip) ?? CGPoint(x: 0.57, y: 0.54)
+        let rAnkle = skeleton.point(for: .rightAnkle) ?? CGPoint(x: 0.61, y: 0.84)
 
         // 1. Lead Arm Extension (no chicken wing / bent left arm)
         let leadArmDeg = threePointAngle(a: lShoulder, b: lElbow, c: lWrist)
@@ -276,11 +308,11 @@ struct PostureEvaluator {
     // MARK: - Stage 4: Downswing & Impact
 
     private static func evaluateImpact(skeleton: PoseSkeleton) -> [CheckpointResult] {
-        let nose = skeleton.joints[.nose] ?? CGPoint(x: 0.50, y: 0.19)
-        let root = skeleton.joints[.root] ?? CGPoint(x: 0.43, y: 0.53)
-        let lAnkle = skeleton.joints[.leftAnkle] ?? CGPoint(x: 0.39, y: 0.84)
-        let rAnkle = skeleton.joints[.rightAnkle] ?? CGPoint(x: 0.61, y: 0.84)
-        let lWrist = skeleton.joints[.leftWrist] ?? CGPoint(x: 0.44, y: 0.52)
+        let nose = skeleton.point(for: .nose) ?? CGPoint(x: 0.50, y: 0.19)
+        let root = skeleton.point(for: .root) ?? CGPoint(x: 0.43, y: 0.53)
+        let lAnkle = skeleton.point(for: .leftAnkle) ?? CGPoint(x: 0.39, y: 0.84)
+        let rAnkle = skeleton.point(for: .rightAnkle) ?? CGPoint(x: 0.61, y: 0.84)
+        let lWrist = skeleton.point(for: .leftWrist) ?? CGPoint(x: 0.44, y: 0.52)
 
         // 1. Weight Shift to Lead Side (Root closer to leftAnkle than rightAnkle)
         let span = max(0.10, Double(rAnkle.x - lAnkle.x))
@@ -342,13 +374,13 @@ struct PostureEvaluator {
     // MARK: - Stage 5: Follow-through & Finish
 
     private static func evaluateFinish(skeleton: PoseSkeleton) -> [CheckpointResult] {
-        let neck = skeleton.joints[.neck] ?? CGPoint(x: 0.40, y: 0.24)
-        let root = skeleton.joints[.root] ?? CGPoint(x: 0.40, y: 0.52)
-        let lAnkle = skeleton.joints[.leftAnkle] ?? CGPoint(x: 0.40, y: 0.84)
-        let lShoulder = skeleton.joints[.leftShoulder] ?? CGPoint(x: 0.37, y: 0.29)
-        let lWrist = skeleton.joints[.leftWrist] ?? CGPoint(x: 0.33, y: 0.21)
-        let rKnee = skeleton.joints[.rightKnee] ?? CGPoint(x: 0.45, y: 0.69)
-        let lKnee = skeleton.joints[.leftKnee] ?? CGPoint(x: 0.39, y: 0.69)
+        let neck = skeleton.point(for: .neck) ?? CGPoint(x: 0.40, y: 0.24)
+        let root = skeleton.point(for: .root) ?? CGPoint(x: 0.40, y: 0.52)
+        let lAnkle = skeleton.point(for: .leftAnkle) ?? CGPoint(x: 0.40, y: 0.84)
+        let lShoulder = skeleton.point(for: .leftShoulder) ?? CGPoint(x: 0.37, y: 0.29)
+        let lWrist = skeleton.point(for: .leftWrist) ?? CGPoint(x: 0.33, y: 0.21)
+        let rKnee = skeleton.point(for: .rightKnee) ?? CGPoint(x: 0.45, y: 0.69)
+        let lKnee = skeleton.point(for: .leftKnee) ?? CGPoint(x: 0.39, y: 0.69)
 
         // 1. Stacked Balance Over Lead Foot
         let stackDeviation = abs(Double(root.x - lAnkle.x)) + abs(Double(neck.x - lAnkle.x)) * 0.8

@@ -80,7 +80,9 @@ final class VisionPoseDetector {
 
     func toggleCameraPosition() {
         isUsingFrontCamera.toggle()
-        frameProcessor?.isMirrored = isUsingFrontCamera
+        detectedSkeleton = nil
+        isHumanDetected = false
+        frameProcessor?.setMirrored(isUsingFrontCamera)
         guard authorizationState == .authorized else { return }
         configureAndStartSession()
     }
@@ -93,6 +95,7 @@ final class VisionPoseDetector {
             }
             Task { @MainActor [weak self] in
                 self?.isCameraRunning = false
+                self?.isHumanDetected = false
             }
         }
     }
@@ -102,7 +105,7 @@ final class VisionPoseDetector {
         let useFront = isUsingFrontCamera
         let outputDelegate = frameProcessor
         let outputQueue = videoOutputQueue
-        frameProcessor?.isMirrored = useFront
+        frameProcessor?.setMirrored(useFront)
 
         sessionQueue.async {
             session.beginConfiguration()
@@ -178,13 +181,26 @@ final class VisionPoseDetector {
 // MARK: - Nonisolated Vision Frame Processor
 
 nonisolated final class VisionFrameProcessor: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
-    var isMirrored: Bool = true
+    private let stateLock = NSLock()
+    private var mirroredState: Bool = true
     private let onResult: @Sendable (PoseSkeleton?, Bool) -> Void
     private var frameCounter: Int = 0
 
     init(onResult: @escaping @Sendable (PoseSkeleton?, Bool) -> Void) {
         self.onResult = onResult
         super.init()
+    }
+
+    func setMirrored(_ value: Bool) {
+        stateLock.lock()
+        mirroredState = value
+        stateLock.unlock()
+    }
+
+    private var isMirrored: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return mirroredState
     }
 
     func captureOutput(

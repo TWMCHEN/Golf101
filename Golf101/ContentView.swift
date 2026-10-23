@@ -16,24 +16,25 @@ struct ContentView: View {
     @State private var selectedStageForPlay: GolfStage? = nil
     @State private var selectedStageForComparison: GolfStage? = nil
     @State private var showGripGuideSheet: Bool = false
+    @State private var showPlayerLoginSheet: Bool = false
+    @State private var fallbackProfile = PlayerProfile()
 
     private var activeProfile: PlayerProfile {
-        if let first = profiles.first {
-            return first
-        }
-        let created = PlayerProfile()
-        modelContext.insert(created)
-        return created
+        profiles.first ?? fallbackProfile
     }
 
     private var totalStars: Int {
         stageRecords.map(\.stars).reduce(0, +)
     }
 
+    private var clearedStagesCount: Int {
+        stageRecords.filter { $0.stars > 0 }.count
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
-                // Fairway Green & Sky Cartoon Gradient Background
+                // Fairway Green & Sky Gradient Background
                 LinearGradient(
                     colors: [
                         Color(red: 0.06, green: 0.14, blue: 0.22),
@@ -47,7 +48,7 @@ struct ContentView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // 1. Golfer Profile & XP Header Card
+                        // 1. Golfer Profile, Bio & Practice Badges Header Card
                         playerHeaderCard(profile: activeProfile)
 
                         // 2. Quick Grip Style Selector Banner
@@ -93,6 +94,24 @@ struct ContentView: View {
             }
             .navigationTitle("Golf 101 揮桿闖關學院")
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showPlayerLoginSheet = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: activeProfile.avatarSymbol)
+                            Text("球員證 / 徽章")
+                        }
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.mint.opacity(0.22), in: Capsule())
+                        .foregroundStyle(.mint)
+                    }
+                    .accessibilityIdentifier("OpenPlayerProfileToolbarButton")
+                }
+            }
             .navigationDestination(item: $selectedStageForPlay) { stage in
                 StagePlayView(
                     stage: stage,
@@ -115,48 +134,101 @@ struct ContentView: View {
             .sheet(isPresented: $showGripGuideSheet) {
                 GripEncyclopediaSheet(profile: activeProfile)
             }
+            .sheet(isPresented: $showPlayerLoginSheet) {
+                PlayerLoginProfileSheet(
+                    profile: activeProfile,
+                    clearedStagesCount: clearedStagesCount,
+                    isInitialOnboarding: !activeProfile.hasCompletedOnboarding,
+                    onConfirmLogin: {
+                        try? modelContext.save()
+                    }
+                )
+            }
             .onAppear {
                 ensureProfileExists()
+                if !activeProfile.hasCompletedOnboarding {
+                    showPlayerLoginSheet = true
+                }
             }
         }
     }
 
-    // MARK: - Player Header Card
+    // MARK: - Player Header Card (with Nickname, Bio & Practice Badges)
 
     private func playerHeaderCard(profile: PlayerProfile) -> some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.green, .mint],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 62, height: 62)
+        let highestBadge = PracticeBadge.highestUnlocked(
+            totalSessions: profile.totalPracticeSessions,
+            clearedStagesCount: clearedStagesCount
+        )
 
-                    Text("🏌️")
-                        .font(.system(size: 32))
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                Button {
+                    showPlayerLoginSheet = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.green, .mint],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 62, height: 62)
+
+                        Image(systemName: profile.avatarSymbol)
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundStyle(.black)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Text(profile.rankTitle)
-                            .font(.subheadline.weight(.heavy))
-                            .foregroundStyle(.yellow)
+                        Text(profile.playerName)
+                            .font(.title3.weight(.black))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+
                         Text("Lv.\(profile.level)")
-                            .font(.caption.weight(.black))
+                            .font(.caption2.weight(.black))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
                             .background(Color.yellow, in: Capsule())
                             .foregroundStyle(.black)
+
+                        Spacer()
+
+                        Button {
+                            showPlayerLoginSheet = true
+                        } label: {
+                            Label("編輯簡介", systemImage: "pencil.line")
+                                .font(.caption2.weight(.bold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.white.opacity(0.14), in: Capsule())
+                                .foregroundStyle(.white)
+                        }
                     }
 
-                    Text("高爾夫初學者 AI 訓練營")
-                        .font(.title3.weight(.black))
-                        .foregroundStyle(.white)
+                    HStack(spacing: 6) {
+                        Text(profile.rankTitle)
+                            .font(.caption.weight(.heavy))
+                            .foregroundStyle(.yellow)
+
+                        if let highestBadge {
+                            Text("• 🏅 \(highestBadge.title)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.mint)
+                        }
+                    }
+
+                    // Player Bio
+                    Text(profile.playerBio)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.78))
+                        .lineLimit(2)
+                        .padding(.top, 1)
 
                     // XP Progress bar
                     VStack(alignment: .leading, spacing: 4) {
@@ -175,7 +247,7 @@ struct ContentView: View {
                                     .frame(width: geo.size.width * profile.currentLevelProgress)
                             }
                         }
-                        .frame(height: 8)
+                        .frame(height: 7)
 
                         HStack {
                             Text("總經驗值 \(profile.totalXP) XP")
@@ -187,11 +259,36 @@ struct ContentView: View {
                                 .foregroundStyle(.white.opacity(0.6))
                         }
                     }
+                    .padding(.top, 2)
                 }
             }
 
             Divider()
                 .background(.white.opacity(0.15))
+
+            // Practice Badges Strip (Clickable to open Badge Cabinet)
+            Button {
+                showPlayerLoginSheet = true
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label("練習通關徽章 (\(profile.totalPracticeSessions) 次練習)", systemImage: "medal.fill")
+                            .font(.caption.weight(.heavy))
+                            .foregroundStyle(.yellow)
+                        Spacer()
+                        Text("查看全部徽章 ›")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.mint)
+                    }
+
+                    HStack(spacing: 8) {
+                        ForEach(PracticeBadge.allBadges) { badge in
+                            miniBadgeCell(for: badge, totalSessions: profile.totalPracticeSessions)
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
 
             // Stats Row
             HStack(spacing: 12) {
@@ -205,13 +302,13 @@ struct ContentView: View {
                     icon: "flag.checkered",
                     iconColor: .green,
                     title: "已通關卡",
-                    value: "\(stageRecords.filter { $0.stars > 0 }.count) / 5"
+                    value: "\(clearedStagesCount) / 5"
                 )
                 statPill(
-                    icon: "wand.and.stars",
-                    iconColor: .cyan,
-                    title: "動作訂正",
-                    value: "\(profile.totalCorrectionsCount) 次"
+                    icon: "flame.fill",
+                    iconColor: .orange,
+                    title: "累計練習",
+                    value: "\(profile.totalPracticeSessions) 次"
                 )
             }
         }
@@ -223,6 +320,47 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 24)
                         .stroke(Color.white.opacity(0.18), lineWidth: 1)
                 )
+        )
+    }
+
+    private func miniBadgeCell(for badge: PracticeBadge, totalSessions: Int) -> some View {
+        let isUnlocked = badge.isUnlocked(
+            totalSessions: totalSessions,
+            clearedStagesCount: clearedStagesCount
+        )
+        let fillGradient: LinearGradient = isUnlocked
+            ? LinearGradient(colors: badge.accentColors, startPoint: .topLeading, endPoint: .bottomTrailing)
+            : LinearGradient(colors: [Color.white.opacity(0.10), Color.white.opacity(0.05)], startPoint: .top, endPoint: .bottom)
+
+        return VStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .fill(fillGradient)
+                    .frame(width: 36, height: 36)
+
+                Image(systemName: isUnlocked ? badge.iconName : "lock.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(isUnlocked ? .white : .white.opacity(0.35))
+            }
+            .overlay(
+                Circle()
+                    .stroke(isUnlocked ? Color.white.opacity(0.55) : Color.white.opacity(0.10), lineWidth: 1.2)
+            )
+
+            Text(badge.title.replacingOccurrences(of: "章", with: ""))
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(isUnlocked ? .white : .white.opacity(0.45))
+                .lineLimit(1)
+
+            Text("\(badge.requiredSessions)次")
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(isUnlocked ? .mint : .white.opacity(0.35))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .background(
+            isUnlocked ? Color.white.opacity(0.09) : Color.black.opacity(0.20),
+            in: RoundedRectangle(cornerRadius: 12)
         )
     }
 
@@ -292,8 +430,8 @@ struct ContentView: View {
 
     private func ensureProfileExists() {
         if profiles.isEmpty {
-            let newProfile = PlayerProfile()
-            modelContext.insert(newProfile)
+            modelContext.insert(fallbackProfile)
+            try? modelContext.save()
         }
     }
 
@@ -302,7 +440,6 @@ struct ContentView: View {
     }
 
     private func isStageUnlocked(_ stageID: GolfStageID) -> Bool {
-        // Allow beginners to either play sequentially or jump into any of the 5 fundamentals freely
         return true
     }
 
@@ -315,6 +452,7 @@ struct ContentView: View {
     ) {
         let profile = activeProfile
         profile.totalXP += xpGained
+        profile.totalPracticeSessions += 1
 
         if let existing = record(for: stageID) {
             existing.stars = max(existing.stars, stars)
@@ -376,6 +514,12 @@ struct StageMapCardView: View {
                             Text("最佳 \(Int(record.bestAccuracy))%")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(.green)
+                        }
+
+                        if let record, record.completedCount > 0 {
+                            Text("已練 \(record.completedCount) 次")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.mint)
                         }
 
                         Spacer()

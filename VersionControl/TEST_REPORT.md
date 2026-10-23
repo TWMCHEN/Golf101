@@ -1,10 +1,10 @@
-# Golf 101 揮桿闖關學院 — 自動化測試與生物力學驗證報告 (Test Report)
+# Golf 101 揮桿闖關學院 — 自動化測試、Code Review Debug 與生物力學驗證報告 (Test Report)
 
 - **專案名稱**：Golf 101（高爾夫初學者 AI 姿勢訂正闖關遊戲）
-- **測試版本**：`v1.0.0`
+- **測試版本**：`v1.2.1`
 - **測試日期**：2026-10-23
 - **目標平台**：iOS 26.2 (`arm64-apple-ios26.2-simulator` / Strict `@MainActor` Isolation)
-- **總體結果**：**42 / 42 項斷言全數通過（Pass Rate: 100%，0 Warnings，0 Errors）**
+- **總體結果**：**54 / 54 項斷言全數通過（Pass Rate: 100%，0 Warnings，0 Errors）**
 
 ---
 
@@ -39,8 +39,23 @@
 | **GEO-01** | `90°` 直角幾何計算 | `A(0,1), B(0,0), C(1,0)` | 回傳 `90.0°`（誤差 `< 0.01°`） | `90.0°` | ✅ **PASS** |
 | **GEO-02** | `180°` 平角幾何計算 | `A(0,0), B(0.5,0), C(1,0)` | 回傳 `180.0°`（誤差 `< 0.01°`） | `180.0°` | ✅ **PASS** |
 | **GEO-03** | 零向量重合點防除以零保護 | `A(0.5,0.5), B(0.5,0.5), C(0.5,0.5)` | 安全回傳 `180.0°`，不得產生 `NaN` 或 Crash | `180.0°` (`!isNaN`) | ✅ **PASS** |
-| **DEF-01** | 空骨架 (`Empty PoseSkeleton`) 防禦 | `joints: [:]`（模擬鏡頭未拍到人） | 5 關卡皆正常回傳 3 項指標，無 `NaN` 或越界 | 正常回傳 3 指標 | ✅ **PASS** |
+| **DEF-01** | 空骨架 (`Empty PoseSkeleton`) 防禦 | `joints: [:]`（模擬鏡頭未拍到人） | 5 關卡皆正常回傳 3 項指標、攔截過關並標記 `.needsCorrection` | 正常攔截且無 `NaN` | ✅ **PASS** |
+| **DEF-02** | 低信心度關節 (`confidence < 0.15`) 過濾 | `confidences[.leftAnkle] = 0.05` | `point(for:)` 回傳 `nil` 並攔截為未完整偵測骨架 | 成功過濾並攔截 | ✅ **PASS** |
 | **PRG-01** | 玩家經驗值與稱號晉升 (`PlayerProfile`) | `0 XP -> 250 XP -> 1050 XP` | `Lv.1 練習場初心者` ➔ `Lv.2 果嶺見習生` ➔ `Lv.5 高爾夫姿勢大師` | 等級與稱號完全吻合 | ✅ **PASS** |
+| **BDG-01** | 練習次數通關徽章解鎖 (`PracticeBadge`) | `0 -> 1 -> 3 -> 5 -> 10 -> 20 次練習` 及 `5 關全通關` | 依序解鎖：初踏果嶺銅章 (1次)、鐵桿練習生銀章 (3次)、球道突破者金章 (5次)、翡翠揮桿大師章 (10次)、大滿貫傳奇王冠 (20次/全通關) | 5 階徽章與進度條完全吻合 | ✅ **PASS** |
+| **AUTH-01** | 空白暱稱／簡介防呆與負數邊界夾限 | `name: "  \n "`, `bio: "  "`, `totalSessions: -5` | 自動回退預設名稱 `高球新星` 與預設簡介，負數練習進度安全歸零 (`0.0`) | 完全吻合 | ✅ **PASS** |
+
+---
+
+## 四、Code Review & Debug 修正紀錄 (`v1.2.1`)
+
+| 編號 | 檔案與位置 | 發現問題 (Issue Identified) | 修正方案 (Resolution) | 狀態 |
+| :---: | :--- | :--- | :--- | :---: |
+| **CR-01** | [`ContentView.swift`](../Golf101/ContentView.swift) | `activeProfile` 計算屬性在 SwiftUI `body` 渲染期間呼叫 `modelContext.insert()`，可能於首次載入產生重複 `PlayerProfile` 實例與狀態更新警告 | 改用 `@State private var fallbackProfile` 純讀取回傳，僅於 `.onAppear` 的 `ensureProfileExists()` 執行寫入與儲存 | ✅ 已修復 |
+| **CR-02** | [`PostureEvaluator.swift`](../Golf101/Services/PostureEvaluator.swift) | 各關卡子評分函式直接讀取 `skeleton.joints[...]`，未統一透過 `skeleton.point(for:)` 過濾信心度 `< 0.15` 之雜訊點 | 五大關卡評分與 [`CameraPreviewView.swift`](../Golf101/Views/CameraPreviewView.swift) 畫布繪製全面統一使用 `skeleton.point(for:)` | ✅ 已修復 |
+| **CR-03** | [`VisionPoseDetector.swift`](../Golf101/Services/VisionPoseDetector.swift) | `VisionFrameProcessor` 之鏡像狀態跨執行緒讀寫缺乏鎖保護，且切換前後鏡頭時殘留舊骨架座標 | 新增 `NSLock` 保護 `mirroredState`，並於切換鏡頭與停止 Session 時重置舊骨架狀態 | ✅ 已修復 |
+| **CR-04** | [`StagePlayView.swift`](../Golf101/Views/StagePlayView.swift) | 過關畫面快速連點「領取獎勵並返回地圖」可能重複觸發經驗值與練習次數累加 | 新增 `@State private var hasClaimedReward` 防連點鎖定機制與進度條寬度 `0.0...1.0` 安全夾限 | ✅ 已修復 |
+| **CR-05** | [`GolfGameModels.swift`](../Golf101/Models/GolfGameModels.swift) & [`PlayerAuthProfileView.swift`](../Golf101/Views/PlayerAuthProfileView.swift) | 負數經驗值或練習次數可能導致 `GeometryReader` 計算出負數寬度；暱稱／簡介防呆邏輯分散於 View 層 | 抽取 `PlayerProfile.sanitizeName(_:)`、`sanitizeBio(_:)` 與 `applyLoginProfile(...)`，並對 `totalXP` 與 `totalSessions` 加入非負數夾限 | ✅ 已修復 |
 
 ---
 

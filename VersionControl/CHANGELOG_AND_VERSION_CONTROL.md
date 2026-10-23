@@ -6,6 +6,29 @@
 
 ## 一、版本演進歷史 (Release History)
 
+### `v1.2.1` — 2026-10-23（全專案 Code Review、Debug 加固與 54 項自動化測試全數通過）
+- **SwiftData 渲染純淨度修正 (`ContentView.swift`)**：移除計算屬性 `activeProfile` 內的 `modelContext.insert` 副作用，避免首次渲染重複建立 `PlayerProfile`。
+- **Vision 信心度一致性與執行緒安全 (`PostureEvaluator.swift`, `CameraPreviewView.swift`, `VisionPoseDetector.swift`)**：全面統一使用 `skeleton.point(for:)` 過濾低信心度 (`< 0.15`) 關節點；為 `VisionFrameProcessor` 鏡像狀態加上 `NSLock` 執行緒鎖，並在切換前後鏡頭時清除殘留骨架。
+- **防連點與邊界防呆 (`StagePlayView.swift`, `GolfGameModels.swift`, `PlayerAuthProfileView.swift`)**：加入過關領獎防重複點擊保護 (`hasClaimedReward`)、抽取 `PlayerProfile.sanitizeName` / `sanitizeBio` 統一防呆，並擴充自動化測試至 **54 / 54 項斷言全數通過**。
+
+### `v1.2.0` — 2026-10-23（五大關卡分解步驟練習）
+- **逐步姿勢訓練 (`StagePlayView`)**：五大關卡各拆成 3 個依序完成的小步驟，共 15 個練習重點；每步顯示專屬動作提示與目前指標吻合度。
+- **逐步通關機制**：只有目前步驟達標並定格維持後才會解鎖下一步；完成前一步後可回看已練習步驟，最後一步完成才會結算整關星級、經驗值與觀念問答。
+- **上桿分解**：拆成胸口帶動啟動、上桿保持手臂寬度、頂點穩住下盤，分別對應轉肩、前導臂延伸與 Anti-Sway 評分。
+
+### `v1.1.0` — 2026-10-23（新增球員登入通行證、個人高球簡介與五階練習通關徽章館）
+- **球員登入與個人簡介 (`PlayerLoginProfileSheet` / `PlayerAuthProfileView.swift`)**：
+  - 首次啟動自動開啟「球員登入通行證設定」，並支援於主畫面頂部與導覽列隨時點擊「球員證 / 徽章」編輯個人資料。
+  - 支援自訂 **球員暱稱 (`playerName`)**、**個人高球簡介／目標宣言 (`playerBio`)**（附帶一鍵快速目標標籤）與 **5 款高球代表圖章 (`avatarSymbol`)**，並提供即時球員通行證預覽卡。
+- **五階練習通關榮譽徽章系統 (`PracticeBadge`)**：
+  - 依據累計練習通關次數 (`totalPracticeSessions`) 與通關進度，自動計算進度百分比並解鎖五階榮譽徽章：
+    1. 🥉 **初踏果嶺銅章 (`FIRST TEE ROOKIE`)**：完成 1 次練習通關
+    2. 🥈 **鐵桿練習生銀章 (`RANGE REGULAR`)**：累計完成 3 次練習通關
+    3. 🥇 **球道突破者金章 (`FAIRWAY BREAKER`)**：累計完成 5 次練習通關
+    4. 💎 **翡翠揮桿大師章 (`EMERALD SWING PRO`)**：累計完成 10 次練習通關
+    5. 👑 **大滿貫傳奇王冠 (`GRAND SLAM LEGEND`)**：累計完成 20 次練習或全數通過 5 大關卡
+  - 新增徽章解鎖單元測試，全專案測試擴充至 **48 / 48 項全數通過**。
+
 ### `v1.0.0` — 2026-10-23（正式基準版：生物力學人形 + 五大關卡 AI 姿勢訂正）
 - **核心功能新增**：
   - 建立 **五道高爾夫基本功闖關系統**：
@@ -43,13 +66,14 @@ Golf101/
 │   │   └── VisionPoseDetector.swift           # AVFoundation 相機與 Vision 全身/手部骨架追蹤器
 │   └── Views/
 │       ├── CameraPreviewView.swift            # 生物力學人形膠囊、空心支點、光弧與引線標籤畫布
+│       ├── PlayerAuthProfileView.swift        # 球員登入通行證、暱稱簡介設定與五階練習徽章館
 │       ├── PostureComparisonView.swift        # NG 錯誤 vs. 黃金標準姿勢自動變形對比圖鑑
-│       └── StagePlayView.swift                # 闖關實測畫面、語音教練、定格集氣與過關問答
+│       └── StagePlayView.swift                # 闖關實測畫面、分解步驟練習、語音教練與過關問答
 ├── Golf101Tests/
 │   └── Golf101Tests.swift                     # Swift Testing 單元測試套件
 ├── Golf101UITests/                            # UI 測試目標
 └── VersionControl/                            # 獨立版本控制與測試報告資料夾
-    ├── TEST_REPORT.md                         # 42/42 自動化測試與生物力學驗證報告
+    ├── TEST_REPORT.md                         # 54/54 自動化測試、Code Review Debug 與生物力學驗證報告
     ├── CHANGELOG_AND_VERSION_CONTROL.md       # 版本控制紀錄與架構說明
     └── Scripts/
         └── TestRunner.swift                   # 可獨立編譯執行的命令列自動化驗證腳本
@@ -71,12 +95,13 @@ Golf101/
      Golf101/Views/CameraPreviewView.swift \
      Golf101/Views/PostureComparisonView.swift \
      Golf101/Views/StagePlayView.swift \
+     Golf101/Views/PlayerAuthProfileView.swift \
      Golf101/ContentView.swift \
      Golf101/Golf101App.swift \
      Golf101/Item.swift
    ```
 
-2. **編譯並執行 42 項生物力學自動化測試腳本**：
+2. **編譯並執行 54 項生物力學與徽章系統自動化測試腳本**：
    ```bash
    xcrun --sdk macosx swiftc -disable-sandbox \
      -module-cache-path /tmp/swift-module-cache-mac \
