@@ -400,6 +400,7 @@
 				DEVELOPMENT_TEAM = 2N8U2Y5WRS;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Golf 101 需要使用相機透過 AI 骨架偵測來即時分析並訂正您的高爾夫站姿、握桿與揮桿動作。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -432,6 +433,7 @@
 				DEVELOPMENT_TEAM = 2N8U2Y5WRS;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Golf 101 需要使用相機透過 AI 骨架偵測來即時分析並訂正您的高爾夫站姿、握桿與揮桿動作。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

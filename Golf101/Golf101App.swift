@@ -12,15 +12,21 @@ import SwiftData
 struct Golf101App: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            PlayerProfile.self,
+            StageRecord.self,
+            Item.self
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let persistentConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+        if let container = try? ModelContainer(for: schema, configurations: [persistentConfig]) {
+            return container
         }
+        // Graceful fallback to in-memory container if persistent storage is unavailable
+        let memoryConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        guard let fallbackContainer = try? ModelContainer(for: schema, configurations: [memoryConfig]) else {
+            preconditionFailure("Unable to initialize SwiftData ModelContainer")
+        }
+        return fallbackContainer
     }()
 
     var body: some Scene {
