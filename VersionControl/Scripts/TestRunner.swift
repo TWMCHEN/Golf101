@@ -102,6 +102,15 @@ struct TestRunner {
         check(PlayerProfile.sanitizeBio("   ") == PlayerProfile.defaultPlayerBio, "空白簡介自動回退預設目標簡介")
         check(PracticeBadge.allBadges[0].progress(totalSessions: -5, clearedStagesCount: 0) == 0.0, "負數練習次數邊界保護通過 (進度 = 0.0)")
 
+        // 5. Speech Command Parsing Verification
+        print("\n[繁體中文語音指令解析驗證 (SpeechCommand)]")
+        check(SpeechCommand.parse("請進入下一步") == .next, "語音「請進入下一步」解析為 .next")
+        check(SpeechCommand.parse("完成 　這一步") == .next, "含全形／半形空白之「完成這一步」解析為 .next")
+        check(SpeechCommand.parse("教練再說一次") == .repeatTip, "語音「教練再說一次」解析為 .repeatTip")
+        check(SpeechCommand.parse("重新開始練習") == .restartStep, "語音「重新開始練習」解析為 .restartStep")
+        check(SpeechCommand.parse("請問語音指令有哪些") == .help, "語音「請問語音指令有哪些」解析為 .help")
+        check(SpeechCommand.parse("   　\n ") == nil && SpeechCommand.parse("今天天氣真好") == nil, "空白與非指令語句安全回傳 nil")
+
         print("\n==============================================")
         print("總計通過: \(passedCount) 項 | 失敗: \(failedCount) 項")
         if failedCount > 0 {

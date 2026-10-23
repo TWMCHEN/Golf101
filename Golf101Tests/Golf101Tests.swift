@@ -167,4 +167,16 @@ struct Golf101Tests {
         #expect(!eval.isAllPassing)
         #expect(eval.checkpoints.allSatisfy { $0.status == .needsCorrection })
     }
+
+    @Test("語音指令解析測試：支援下一步、再說一次、重來、語音指令與雜訊過濾")
+    func speechCommandParsingValidation() async throws {
+        #expect(SpeechCommand.parse("請進入下一步") == .next)
+        #expect(SpeechCommand.parse("完成 這一步") == .next)
+        #expect(SpeechCommand.parse("教練再說一次") == .repeatTip)
+        #expect(SpeechCommand.parse("重複提示") == .repeatTip)
+        #expect(SpeechCommand.parse("重新開始練習") == .restartStep)
+        #expect(SpeechCommand.parse("語音指令有哪些") == .help)
+        #expect(SpeechCommand.parse("   　\n  ") == nil)
+        #expect(SpeechCommand.parse("今天天氣真好") == nil)
+    }
 }

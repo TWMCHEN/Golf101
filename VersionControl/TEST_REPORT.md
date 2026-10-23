@@ -1,10 +1,10 @@
 # Golf 101 揮桿闖關學院 — 自動化測試、Code Review Debug 與生物力學驗證報告 (Test Report)
 
 - **專案名稱**：Golf 101（高爾夫初學者 AI 姿勢訂正闖關遊戲）
-- **測試版本**：`v1.2.1`
+- **測試版本**：`v1.3.0`
 - **測試日期**：2026-10-23
 - **目標平台**：iOS 26.2 (`arm64-apple-ios26.2-simulator` / Strict `@MainActor` Isolation)
-- **總體結果**：**54 / 54 項斷言全數通過（Pass Rate: 100%，0 Warnings，0 Errors）**
+- **總體結果**：**60 / 60 項斷言全數通過（Pass Rate: 100%，0 Warnings，0 Errors）**
 
 ---
 
@@ -44,10 +44,11 @@
 | **PRG-01** | 玩家經驗值與稱號晉升 (`PlayerProfile`) | `0 XP -> 250 XP -> 1050 XP` | `Lv.1 練習場初心者` ➔ `Lv.2 果嶺見習生` ➔ `Lv.5 高爾夫姿勢大師` | 等級與稱號完全吻合 | ✅ **PASS** |
 | **BDG-01** | 練習次數通關徽章解鎖 (`PracticeBadge`) | `0 -> 1 -> 3 -> 5 -> 10 -> 20 次練習` 及 `5 關全通關` | 依序解鎖：初踏果嶺銅章 (1次)、鐵桿練習生銀章 (3次)、球道突破者金章 (5次)、翡翠揮桿大師章 (10次)、大滿貫傳奇王冠 (20次/全通關) | 5 階徽章與進度條完全吻合 | ✅ **PASS** |
 | **AUTH-01** | 空白暱稱／簡介防呆與負數邊界夾限 | `name: "  \n "`, `bio: "  "`, `totalSessions: -5` | 自動回退預設名稱 `高球新星` 與預設簡介，負數練習進度安全歸零 (`0.0`) | 完全吻合 | ✅ **PASS** |
+| **SPEECH-01** | 繁體中文語音指令解析 (`SpeechCommand.parse`) | `"請進入下一步"`, `"完成 　這一步"`, `"教練再說一次"`, `"重新開始練習"`, `"請問語音指令有哪些"`, `"   　\n "` | 依序解析為 `.next`、`.next`、`.repeatTip`、`.restartStep`、`.help`，空白與無關語句回傳 `nil` | 6 項語音解析全數吻合 | ✅ **PASS** |
 
 ---
 
-## 四、Code Review & Debug 修正紀錄 (`v1.2.1`)
+## 四、Code Review & Debug 修正紀錄 (`v1.2.1` ~ `v1.3.0`)
 
 | 編號 | 檔案與位置 | 發現問題 (Issue Identified) | 修正方案 (Resolution) | 狀態 |
 | :---: | :--- | :--- | :--- | :---: |
@@ -56,6 +57,8 @@
 | **CR-03** | [`VisionPoseDetector.swift`](../Golf101/Services/VisionPoseDetector.swift) | `VisionFrameProcessor` 之鏡像狀態跨執行緒讀寫缺乏鎖保護，且切換前後鏡頭時殘留舊骨架座標 | 新增 `NSLock` 保護 `mirroredState`，並於切換鏡頭與停止 Session 時重置舊骨架狀態 | ✅ 已修復 |
 | **CR-04** | [`StagePlayView.swift`](../Golf101/Views/StagePlayView.swift) | 過關畫面快速連點「領取獎勵並返回地圖」可能重複觸發經驗值與練習次數累加 | 新增 `@State private var hasClaimedReward` 防連點鎖定機制與進度條寬度 `0.0...1.0` 安全夾限 | ✅ 已修復 |
 | **CR-05** | [`GolfGameModels.swift`](../Golf101/Models/GolfGameModels.swift) & [`PlayerAuthProfileView.swift`](../Golf101/Views/PlayerAuthProfileView.swift) | 負數經驗值或練習次數可能導致 `GeometryReader` 計算出負數寬度；暱稱／簡介防呆邏輯分散於 View 層 | 抽取 `PlayerProfile.sanitizeName(_:)`、`sanitizeBio(_:)` 與 `applyLoginProfile(...)`，並對 `totalXP` 與 `totalSessions` 加入非負數夾限 | ✅ 已修復 |
+| **CR-06** | [`SpeechCommandListener.swift`](../Golf101/Services/SpeechCommandListener.swift) | 1. 權限非同步等待期間重複點擊麥克風可能重複執行 `installTap(onBus: 0)` 造成 `AVAudioEngine` 崩潰<br>2. 模擬器無輸入聲道 (`sampleRate == 0`) 時直接 `installTap` 會拋出例外<br>3. `stop()` 僅在 `audioEngine.isRunning` 時移除 Tap | 新增 `isStarting` 重入保護、`hasInstalledTap` 狀態追蹤、以及 `format.sampleRate > 0 && format.channelCount > 0` 聲道防禦檢查；強化全形空白與換行符號清理 | ✅ 已修復 |
+| **CR-07** | [`StagePlayView.swift`](../Golf101/Views/StagePlayView.swift) | 定格計時自動過關或進入下一步時，若語音聆聽 (`isListening`) 仍在開啟狀態，會阻擋語音教練播報過關提示且麥克風未自動關閉 | 於 `completeCurrentDrillStep()` 與 `triggerStageClear()` 自動停止語音聆聽，確保過關語音正常播報並釋放麥克風資源 | ✅ 已修復 |
 
 ---
 

@@ -6,6 +6,15 @@
 
 ## 一、版本演進歷史 (Release History)
 
+### `v1.3.0` — 2026-10-23（繁體中文語音指令互動、AVAudioEngine 防呆加固與 60 項自動化測試通過）
+- **語音指令互動 (`SpeechCommandListener.swift`, `StagePlayView.swift`)**：
+  - 新增繁體中文語音指令辨識（`SFSpeechRecognizer(locale: Locale(identifier: "zh-TW"))`），支援說出「下一步」、「再說一次」、「重來」或「語音指令」免持控制分解練習步驟。
+  - **Code Review & Debug 加固 (`CR-06`, `CR-07`)**：
+    - 加入 `isStarting` 非同步權限重入保護與 `hasInstalledTap` 狀態追蹤，防止重複安裝 `AVAudioNode` Tap 導致崩潰。
+    - 加入 `format.sampleRate > 0 && format.channelCount > 0` 輸入聲道防禦檢查，避免無麥克風硬體時啟動失敗。
+    - 於步驟自動完成或關卡過關時自動停止語音聆聽，確保教練過關語音正常播報並釋放麥克風資源。
+  - 擴充語音指令解析自動化測試，全專案測試提升至 **60 / 60 項斷言全數通過**。
+
 ### `v1.2.1` — 2026-10-23（全專案 Code Review、Debug 加固與 54 項自動化測試全數通過）
 - **SwiftData 渲染純淨度修正 (`ContentView.swift`)**：移除計算屬性 `activeProfile` 內的 `modelContext.insert` 副作用，避免首次渲染重複建立 `PlayerProfile`。
 - **Vision 信心度一致性與執行緒安全 (`PostureEvaluator.swift`, `CameraPreviewView.swift`, `VisionPoseDetector.swift`)**：全面統一使用 `skeleton.point(for:)` 過濾低信心度 (`< 0.15`) 關節點；為 `VisionFrameProcessor` 鏡像狀態加上 `NSLock` 執行緒鎖，並在切換前後鏡頭時清除殘留骨架。
@@ -15,6 +24,7 @@
 - **逐步姿勢訓練 (`StagePlayView`)**：五大關卡各拆成 3 個依序完成的小步驟，共 15 個練習重點；每步顯示專屬動作提示與目前指標吻合度。
 - **逐步通關機制**：只有目前步驟達標並定格維持後才會解鎖下一步；完成前一步後可回看已練習步驟，最後一步完成才會結算整關星級、經驗值與觀念問答。
 - **上桿分解**：拆成胸口帶動啟動、上桿保持手臂寬度、頂點穩住下盤，分別對應轉肩、前導臂延伸與 Anti-Sway 評分。
+- **語音指令互動 (`SpeechCommandListener`)**：新增繁體中文語音辨識，可說「下一步」、「再說一次」、「重來」或「語音指令」控制練習；只有目前步驟達標時才接受下一步指令，並在練習頁離開時停止麥克風。
 
 ### `v1.1.0` — 2026-10-23（新增球員登入通行證、個人高球簡介與五階練習通關徽章館）
 - **球員登入與個人簡介 (`PlayerLoginProfileSheet` / `PlayerAuthProfileView.swift`)**：
@@ -63,17 +73,18 @@ Golf101/
 │   │   └── GolfGameModels.swift               # 關卡定義、骨架結構、評分結果與 SwiftData 實體
 │   ├── Services/
 │   │   ├── PostureEvaluator.swift             # 生物力學幾何計算與五關卡評分引擎
+│   │   ├── SpeechCommandListener.swift        # 繁體中文語音指令辨識與 AVAudioEngine 管理
 │   │   └── VisionPoseDetector.swift           # AVFoundation 相機與 Vision 全身/手部骨架追蹤器
 │   └── Views/
 │       ├── CameraPreviewView.swift            # 生物力學人形膠囊、空心支點、光弧與引線標籤畫布
 │       ├── PlayerAuthProfileView.swift        # 球員登入通行證、暱稱簡介設定與五階練習徽章館
 │       ├── PostureComparisonView.swift        # NG 錯誤 vs. 黃金標準姿勢自動變形對比圖鑑
-│       └── StagePlayView.swift                # 闖關實測畫面、分解步驟練習、語音教練與過關問答
+│       └── StagePlayView.swift                # 闖關實測畫面、分解步驟練習、語音指令與過關問答
 ├── Golf101Tests/
 │   └── Golf101Tests.swift                     # Swift Testing 單元測試套件
 ├── Golf101UITests/                            # UI 測試目標
 └── VersionControl/                            # 獨立版本控制與測試報告資料夾
-    ├── TEST_REPORT.md                         # 54/54 自動化測試、Code Review Debug 與生物力學驗證報告
+    ├── TEST_REPORT.md                         # 60/60 自動化測試、Code Review Debug 與生物力學驗證報告
     ├── CHANGELOG_AND_VERSION_CONTROL.md       # 版本控制紀錄與架構說明
     └── Scripts/
         └── TestRunner.swift                   # 可獨立編譯執行的命令列自動化驗證腳本
@@ -92,6 +103,7 @@ Golf101/
      Golf101/Models/GolfGameModels.swift \
      Golf101/Services/PostureEvaluator.swift \
      Golf101/Services/VisionPoseDetector.swift \
+     Golf101/Services/SpeechCommandListener.swift \
      Golf101/Views/CameraPreviewView.swift \
      Golf101/Views/PostureComparisonView.swift \
      Golf101/Views/StagePlayView.swift \
@@ -101,13 +113,14 @@ Golf101/
      Golf101/Item.swift
    ```
 
-2. **編譯並執行 54 項生物力學與徽章系統自動化測試腳本**：
+2. **編譯並執行 60 項生物力學、徽章系統與語音指令自動化測試腳本**：
    ```bash
    xcrun --sdk macosx swiftc -disable-sandbox \
      -module-cache-path /tmp/swift-module-cache-mac \
      -parse-as-library \
      Golf101/Models/GolfGameModels.swift \
      Golf101/Services/PostureEvaluator.swift \
+     Golf101/Services/SpeechCommandListener.swift \
      VersionControl/Scripts/TestRunner.swift \
      -o /tmp/golf101_test_runner && /tmp/golf101_test_runner
    ```

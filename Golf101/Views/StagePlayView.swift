@@ -40,6 +40,7 @@ struct StagePlayView: View {
     @State private var isVoiceCoachEnabled: Bool = true
     @State private var lastSpokenTip: String = ""
     @State private var speechSynthesizer = AVSpeechSynthesizer()
+    @State private var speechCommandListener = SpeechCommandListener()
 
     // Quiz state in victory modal
     @State private var selectedQuizOption: Int? = nil
@@ -197,6 +198,7 @@ struct StagePlayView: View {
         }
         .onDisappear {
             poseDetector.stopSession()
+            speechCommandListener.stop(status: "")
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
         .onReceive(holdTimer) { _ in
@@ -338,6 +340,32 @@ struct StagePlayView: View {
                 Text("第 \(currentDrillStepIndex + 1) / \(drillSteps.count) 步")
                     .font(.caption2.monospacedDigit().weight(.bold))
                     .foregroundStyle(.white.opacity(0.8))
+
+                Button {
+                    if speechCommandListener.isListening {
+                        speechCommandListener.stop()
+                    } else {
+                        speechSynthesizer.stopSpeaking(at: .immediate)
+                        Task {
+                            await speechCommandListener.start(onCommand: executeVoiceCommand)
+                        }
+                    }
+                } label: {
+                    Label(
+                        speechCommandListener.isListening ? "聆聽中" : "語音指令",
+                        systemImage: speechCommandListener.isListening ? "waveform" : "mic.fill"
+                    )
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(
+                        speechCommandListener.isListening ? Color.red.opacity(0.85) : Color.white.opacity(0.12),
+                        in: Capsule()
+                    )
+                    .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(speechCommandListener.isListening ? "停止語音聆聽" : "開始語音指令")
             }
 
             HStack(spacing: 6) {
@@ -388,6 +416,10 @@ struct StagePlayView: View {
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.white.opacity(0.78))
                         .fixedSize(horizontal: false, vertical: true)
+                    Text(speechCommandListener.statusMessage)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(speechCommandListener.isListening ? .mint : .white.opacity(0.52))
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
@@ -886,6 +918,9 @@ struct StagePlayView: View {
         completedDrillStepIDs.insert(currentDrillStep.id)
 
         if currentDrillStepIndex + 1 < drillSteps.count {
+            if speechCommandListener.isListening {
+                speechCommandListener.stop(status: "已完成本步，進入下一步")
+            }
             withAnimation(.spring(duration: 0.35)) {
                 currentDrillStepIndex += 1
                 holdElapsed = 0
@@ -896,7 +931,36 @@ struct StagePlayView: View {
         }
     }
 
+    private func executeVoiceCommand(_ command: SpeechCommand) {
+        switch command {
+        case .next:
+            guard isCurrentDrillStepPassing else {
+                speakCoachTipIfNeeded("目前這一步還沒達標，請先依照畫面提示調整姿勢。", force: true)
+                return
+            }
+            holdElapsed = stage.holdDurationRequired
+            completeCurrentDrillStep()
+
+        case .repeatTip:
+            speakCoachTipIfNeeded(
+                "第 \(currentDrillStepIndex + 1) 步，\(currentDrillStep.title)。\(currentDrillStep.cue)。\(currentDrillStepTip)",
+                force: true
+            )
+
+        case .restartStep:
+            completedDrillStepIDs.remove(currentDrillStep.id)
+            holdElapsed = 0
+            speakCoachTipIfNeeded("已重置目前步驟。\(currentDrillStep.title)：\(currentDrillStep.cue)", force: true)
+
+        case .help:
+            speakCoachTipIfNeeded("你可以說：下一步、再說一次、重來，或語音指令。", force: true)
+        }
+    }
+
     private func triggerStageClear() {
+        if speechCommandListener.isListening {
+            speechCommandListener.stop(status: "恭喜過關，已結束語音聆聽")
+        }
         withAnimation(.spring(duration: 0.5)) {
             isStageCleared = true
         }
@@ -939,7 +1003,7 @@ struct StagePlayView: View {
     }
 
     private func speakCoachTipIfNeeded(_ text: String, force: Bool) {
-        guard isVoiceCoachEnabled else { return }
+        guard isVoiceCoachEnabled, !speechCommandListener.isListening else { return }
         if !force && text == lastSpokenTip { return }
         lastSpokenTip = text
         speechSynthesizer.stopSpeaking(at: .immediate)
