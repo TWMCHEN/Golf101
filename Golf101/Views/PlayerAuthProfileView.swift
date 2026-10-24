@@ -73,7 +73,7 @@ struct PlayerLoginProfileSheet: View {
                                 .font(.title2.weight(.heavy))
                                 .foregroundStyle(.white)
 
-                            Text("設定暱稱與高球目標簡介，隨著練習次數累積解鎖專屬榮譽徽章")
+                            Text("設定暱稱與高球目標簡介，隨著關卡通關累積解鎖專屬榮譽徽章")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.70))
                                 .multilineTextAlignment(.center)
@@ -207,7 +207,7 @@ struct PlayerLoginProfileSheet: View {
                         Text("目前配戴徽章")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.white.opacity(0.6))
-                        Text(highestBadge?.title ?? "尚未解鎖（完成 1 次練習即可獲得）")
+                        Text(highestBadge?.title ?? "尚未解鎖（完成 1 次關卡通關即可獲得）")
                             .font(.caption.weight(.heavy))
                             .foregroundStyle(.white)
                             .lineLimit(1)
@@ -217,7 +217,7 @@ struct PlayerLoginProfileSheet: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text("累計練習通關")
+                    Text("累計關卡通關")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.white.opacity(0.6))
                     Text("\(profile.totalPracticeSessions) 次 • \(unlockedBadgesCount)/\(PracticeBadge.allBadges.count) 徽章")
@@ -396,35 +396,16 @@ struct PlayerLoginProfileSheet: View {
         )
     }
 
-    // MARK: - 3. Practice Count & Clearance Badges Showcase
+    // MARK: - 3. Stage Clearance Badges Showcase
 
     private var badgeCabinetSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("通關與練習次數徽章館", systemImage: "medal.fill")
+                Label("關卡通關徽章館", systemImage: "medal.fill")
                     .font(.subheadline.weight(.heavy))
                     .foregroundStyle(.yellow)
 
                 Spacer()
-
-                // Quick test button to simulate completing +1 practice session
-                Button {
-                    withAnimation(.spring(duration: 0.4)) {
-                        profile.totalPracticeSessions += 1
-                        profile.totalXP += 100
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus.circle.fill")
-                        Text("模擬練習 +1 次")
-                    }
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.yellow.opacity(0.22), in: Capsule())
-                    .foregroundStyle(.yellow)
-                }
-                .accessibilityIdentifier("SimulatePracticeSessionButton")
             }
 
             if let nextBadge = PracticeBadge.nextTargetBadge(
@@ -435,7 +416,7 @@ struct PlayerLoginProfileSheet: View {
                     Image(systemName: "sparkles")
                         .foregroundStyle(.mint)
                         .font(.caption)
-                    Text("距離解鎖「\(nextBadge.title)」還差 \(max(0, nextBadge.requiredSessions - profile.totalPracticeSessions)) 次練習！")
+                    Text("距離解鎖「\(nextBadge.title)」還差 \(max(0, nextBadge.requiredSessions - profile.totalPracticeSessions)) 次關卡通關！")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.85))
                 }

@@ -111,6 +111,24 @@ struct TestRunner {
         check(SpeechCommand.parse("請問語音指令有哪些") == .help, "語音「請問語音指令有哪些」解析為 .help")
         check(SpeechCommand.parse("   　\n ") == nil && SpeechCommand.parse("今天天氣真好") == nil, "空白與非指令語句安全回傳 nil")
 
+        // 6. Practice History Trajectory & Focus Movement Verification
+        print("\n[練習進步軌跡與分解動作弱項診斷驗證 (PracticeHistoryRecord)]")
+        let sampleHistory = PracticeHistoryRecord(
+            stageRawValue: GolfStageID.setup.rawValue,
+            accuracy: 91.6,
+            stars: 2,
+            quizPassed: true,
+            checkpointScores: [
+                "setup_stance": 0.96,
+                "setup_spine": 0.87,
+                "setup_knee": 0.92
+            ]
+        )
+        check(sampleHistory.stageID == .setup && sampleHistory.checkpointScores.count == 3, "PracticeHistoryRecord 分解動作分數 JSON 編解碼正確")
+        let focus = PracticeHistoryRecord.lowestCheckpoint(in: sampleHistory.checkpointScores)
+        check(focus?.id == "setup_spine" && focus?.title == "髖部前傾" && Int(focus?.scorePercent ?? 0) == 87, "自動鎖定最低分分解動作「髖部前傾 (87分)」作為下次加強建議")
+        check(GolfStageID.allCases.allSatisfy({ PracticeHistoryRecord.orderedCheckpointIDs(for: $0).count == 3 }), "五大關卡皆具備 3 項固定順序之圖表分解動作標題")
+
         print("\n==============================================")
         print("總計通過: \(passedCount) 項 | 失敗: \(failedCount) 項")
         if failedCount > 0 {

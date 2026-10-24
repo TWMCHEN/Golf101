@@ -6,6 +6,16 @@
 
 ## 一、版本演進歷史 (Release History)
 
+### `v1.4.0` — 2026-10-24（練習進步軌跡圖表、弱項動作診斷、App Icon 視覺與 63 項自動化測試通過）
+- **練習進步軌跡與弱項診斷 (`PracticeProgressView.swift`, `PracticeHistoryRecord`)**：
+  - 每次關卡完成自動記錄 3 個分解動作得分至 SwiftData `PracticeHistoryRecord`，並以 Swift Charts 繪製各關卡分解動作分數折線趨勢圖與舊紀錄長條圖。
+  - 自動分析最近一次練習中分數最低的分解動作，提供「本次建議加強」與「每日 10 分鐘練習安排建議」。
+  - 新增應用程式專屬圖示（Standard / Dark / Tinted AppIcon）與相機定位完成提示橫幅 (`isCameraPositionReady`)。
+- **Code Review & Debug 修正 (`CR-08` ~ `CR-10`)**：
+  - 重構 `PracticeProgressView.trajectoryCard` 為獨立子視圖與攤平資料點 (`flattenedStageChartPoints`)，解決 Swift 編譯器型別推論逾時錯誤 (`unable to type-check this expression in reasonable time`)，並固定 3 色圖例 domain 防止 Swift Charts 崩潰。
+  - 為 `PracticeHistoryRecord.lowestCheckpoint(in:)` 補齊同分決定性排序與 `0...100` 夾限，並修正 `ContentView` `#Preview` 的 `ModelContainer` Schema。
+  - 全專案自動化測試擴充至 **63 / 63 項斷言全數通過**。
+
 ### `v1.3.0` — 2026-10-23（繁體中文語音指令互動、AVAudioEngine 防呆加固與 60 項自動化測試通過）
 - **語音指令互動 (`SpeechCommandListener.swift`, `StagePlayView.swift`)**：
   - 新增繁體中文語音指令辨識（`SFSpeechRecognizer(locale: Locale(identifier: "zh-TW"))`），支援說出「下一步」、「再說一次」、「重來」或「語音指令」免持控制分解練習步驟。
@@ -79,12 +89,13 @@ Golf101/
 │       ├── CameraPreviewView.swift            # 生物力學人形膠囊、空心支點、光弧與引線標籤畫布
 │       ├── PlayerAuthProfileView.swift        # 球員登入通行證、暱稱簡介設定與五階練習徽章館
 │       ├── PostureComparisonView.swift        # NG 錯誤 vs. 黃金標準姿勢自動變形對比圖鑑
+│       ├── PracticeProgressView.swift         # 練習進步軌跡折線圖、弱項動作診斷與 10 分鐘課表建議
 │       └── StagePlayView.swift                # 闖關實測畫面、分解步驟練習、語音指令與過關問答
 ├── Golf101Tests/
 │   └── Golf101Tests.swift                     # Swift Testing 單元測試套件
 ├── Golf101UITests/                            # UI 測試目標
 └── VersionControl/                            # 獨立版本控制與測試報告資料夾
-    ├── TEST_REPORT.md                         # 60/60 自動化測試、Code Review Debug 與生物力學驗證報告
+    ├── TEST_REPORT.md                         # 63/63 自動化測試、Code Review Debug 與生物力學驗證報告
     ├── CHANGELOG_AND_VERSION_CONTROL.md       # 版本控制紀錄與架構說明
     └── Scripts/
         └── TestRunner.swift                   # 可獨立編譯執行的命令列自動化驗證腳本
@@ -108,12 +119,13 @@ Golf101/
      Golf101/Views/PostureComparisonView.swift \
      Golf101/Views/StagePlayView.swift \
      Golf101/Views/PlayerAuthProfileView.swift \
+     Golf101/Views/PracticeProgressView.swift \
      Golf101/ContentView.swift \
      Golf101/Golf101App.swift \
      Golf101/Item.swift
    ```
 
-2. **編譯並執行 60 項生物力學、徽章系統與語音指令自動化測試腳本**：
+2. **編譯並執行 63 項生物力學、徽章、語音指令與進步軌跡自動化測試腳本**：
    ```bash
    xcrun --sdk macosx swiftc -disable-sandbox \
      -module-cache-path /tmp/swift-module-cache-mac \

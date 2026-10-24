@@ -21,7 +21,7 @@ struct StagePlayView: View {
     let stage: GolfStage
     @Bindable var profile: PlayerProfile
     let stageRecord: StageRecord?
-    let onStageCompleted: (Int, Double, Bool, Int) -> Void
+    let onStageCompleted: (Int, Double, Bool, Int, [String: Double]) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var poseDetector = VisionPoseDetector()
@@ -30,6 +30,7 @@ struct StagePlayView: View {
     @State private var selectedPreset: SimulationPresetMode = .beginnerMistake
     @State private var currentDrillStepIndex: Int = 0
     @State private var completedDrillStepIDs: Set<String> = []
+    @State private var completedDrillStepScores: [String: Double] = [:]
 
     // Hold timer state
     @State private var holdElapsed: Double = 0.0
@@ -53,7 +54,7 @@ struct StagePlayView: View {
         stage: GolfStage,
         profile: PlayerProfile,
         stageRecord: StageRecord?,
-        onStageCompleted: @escaping (Int, Double, Bool, Int) -> Void
+        onStageCompleted: @escaping (Int, Double, Bool, Int, [String: Double]) -> Void
     ) {
         self.stage = stage
         self.profile = profile
@@ -130,6 +131,18 @@ struct StagePlayView: View {
 
     private var isCurrentDrillStepPassing: Bool {
         currentDrillCheckpoint.progress >= 0.86
+    }
+
+    private var isCameraPositionReady: Bool {
+        poseDetector.isHumanDetected
+            && evaluation.checkpoints.allSatisfy { $0.currentValueText != "偵測中" }
+    }
+
+    private var completedStageAccuracy: Double {
+        guard !completedDrillStepScores.isEmpty else { return evaluation.overallAccuracy }
+        let raw = completedDrillStepScores.values.reduce(0, +)
+            / Double(completedDrillStepScores.count) * 100.0
+        return min(100.0, max(0.0, raw))
     }
 
     private var currentDrillStepTip: String {
@@ -571,6 +584,25 @@ struct StagePlayView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 6)
                     }
+                } else if !isInteractiveSimulatorMode {
+                    VStack {
+                        Spacer()
+                        Label(
+                            isCameraPositionReady
+                                ? "定位完成：已偵測到本關所需姿勢，可以開始"
+                                : "已偵測到人形，請調整距離與站位，讓關節完整入鏡",
+                            systemImage: isCameraPositionReady ? "checkmark.circle.fill" : "viewfinder"
+                        )
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            (isCameraPositionReady ? Color.green : Color.orange).opacity(0.88),
+                            in: Capsule()
+                        )
+                        .padding(.bottom, 8)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -744,7 +776,7 @@ struct StagePlayView: View {
     // MARK: - Stage Victory & Quiz Bonus Overlay
 
     private var victoryOverlay: some View {
-        let earnedStars = starsForAccuracy(evaluation.overallAccuracy)
+        let earnedStars = starsForAccuracy(completedStageAccuracy)
         let quizCorrect = selectedQuizOption == stage.quiz.correctIndex
         let totalXP = stage.xpReward + (hasSubmittedQuiz && quizCorrect ? 50 : 0)
 
@@ -777,7 +809,7 @@ struct StagePlayView: View {
                         .padding(.vertical, 4)
 
                         HStack(spacing: 16) {
-                            Label("精準度 \(Int(evaluation.overallAccuracy))%", systemImage: "scope")
+                            Label("精準度 \(Int(completedStageAccuracy))%", systemImage: "scope")
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.green)
 
@@ -862,6 +894,7 @@ struct StagePlayView: View {
                                 holdElapsed = 0
                                 currentDrillStepIndex = 0
                                 completedDrillStepIDs = []
+                                completedDrillStepScores = [:]
                                 selectedQuizOption = nil
                                 hasSubmittedQuiz = false
                                 hasClaimedReward = false
@@ -882,9 +915,10 @@ struct StagePlayView: View {
                             hasClaimedReward = true
                             onStageCompleted(
                                 earnedStars,
-                                evaluation.overallAccuracy,
+                                completedStageAccuracy,
                                 hasSubmittedQuiz && quizCorrect,
-                                totalXP
+                                totalXP,
+                                completedDrillStepScores
                             )
                             dismiss()
                         } label: {
@@ -916,6 +950,7 @@ struct StagePlayView: View {
 
     private func completeCurrentDrillStep() {
         completedDrillStepIDs.insert(currentDrillStep.id)
+        completedDrillStepScores[currentDrillStep.id] = currentDrillCheckpoint.progress
 
         if currentDrillStepIndex + 1 < drillSteps.count {
             if speechCommandListener.isListening {
@@ -938,8 +973,11 @@ struct StagePlayView: View {
                 speakCoachTipIfNeeded("目前這一步還沒達標，請先依照畫面提示調整姿勢。", force: true)
                 return
             }
-            holdElapsed = stage.holdDurationRequired
-            completeCurrentDrillStep()
+            let remaining = max(0, stage.holdDurationRequired - holdElapsed)
+            speakCoachTipIfNeeded(
+                "這一步已達標，請再穩定保持約 \(Int(ceil(remaining))) 秒，達到定格時間後會自動進入下一步。",
+                force: true
+            )
 
         case .repeatTip:
             speakCoachTipIfNeeded(
@@ -949,6 +987,7 @@ struct StagePlayView: View {
 
         case .restartStep:
             completedDrillStepIDs.remove(currentDrillStep.id)
+            completedDrillStepScores.removeValue(forKey: currentDrillStep.id)
             holdElapsed = 0
             speakCoachTipIfNeeded("已重置目前步驟。\(currentDrillStep.title)：\(currentDrillStep.cue)", force: true)
 

@@ -179,4 +179,32 @@ struct Golf101Tests {
         #expect(SpeechCommand.parse("   　\n  ") == nil)
         #expect(SpeechCommand.parse("今天天氣真好") == nil)
     }
+
+    @Test("練習進步軌跡紀錄：分解動作分數編解碼與最低分強化建議判定")
+    func practiceHistoryRecordAndFocusMovementValidation() async throws {
+        let scores: [String: Double] = [
+            "setup_stance": 0.96,
+            "setup_spine": 0.87,
+            "setup_knee": 0.92
+        ]
+        let record = PracticeHistoryRecord(
+            stageRawValue: GolfStageID.setup.rawValue,
+            accuracy: 91.6,
+            stars: 2,
+            quizPassed: true,
+            checkpointScores: scores
+        )
+        #expect(record.stageID == .setup)
+        #expect(abs((record.checkpointScores["setup_spine"] ?? 0) - 0.87) < 0.0001)
+
+        let lowest = PracticeHistoryRecord.lowestCheckpoint(in: record.checkpointScores)
+        #expect(lowest?.id == "setup_spine")
+        #expect(lowest?.title == "髖部前傾")
+        #expect(abs((lowest?.scorePercent ?? 0) - 87.0) < 0.01)
+
+        for stageID in GolfStageID.allCases {
+            let orderedIDs = PracticeHistoryRecord.orderedCheckpointIDs(for: stageID)
+            #expect(orderedIDs.count == 3)
+        }
+    }
 }

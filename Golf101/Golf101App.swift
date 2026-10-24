@@ -14,6 +14,7 @@ struct Golf101App: App {
         let schema = Schema([
             PlayerProfile.self,
             StageRecord.self,
+            PracticeHistoryRecord.self,
             Item.self
         ])
         let persistentConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)

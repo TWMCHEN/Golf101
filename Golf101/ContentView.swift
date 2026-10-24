@@ -12,10 +12,12 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var profiles: [PlayerProfile]
     @Query(sort: \StageRecord.stageRawValue) private var stageRecords: [StageRecord]
+    @Query(sort: \PracticeHistoryRecord.completedAt) private var practiceHistory: [PracticeHistoryRecord]
 
     @State private var selectedStageForPlay: GolfStage? = nil
     @State private var selectedStageForComparison: GolfStage? = nil
     @State private var showGripGuideSheet: Bool = false
+    @State private var showProgressSheet: Bool = false
     @State private var showPlayerLoginSheet: Bool = false
     @State private var fallbackProfile = PlayerProfile()
 
@@ -53,6 +55,18 @@ struct ContentView: View {
 
                         // 2. Quick Grip Style Selector Banner
                         gripBannerCard(profile: activeProfile)
+
+                        Button {
+                            showProgressSheet = true
+                        } label: {
+                            Label("練習進步軌跡與本次加強建議", systemImage: "chart.xyaxis.line")
+                                .font(.subheadline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .background(Color.mint.opacity(0.16), in: RoundedRectangle(cornerRadius: 16))
+                                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.mint.opacity(0.35)))
+                                .foregroundStyle(.mint)
+                        }
 
                         // 3. Section Header
                         HStack {
@@ -117,13 +131,14 @@ struct ContentView: View {
                     stage: stage,
                     profile: activeProfile,
                     stageRecord: record(for: stage.id),
-                    onStageCompleted: { stars, accuracy, quizPassed, xpGained in
+                    onStageCompleted: { stars, accuracy, quizPassed, xpGained, checkpointScores in
                         saveStageCompletion(
                             stageID: stage.id,
                             stars: stars,
                             accuracy: accuracy,
                             quizPassed: quizPassed,
-                            xpGained: xpGained
+                            xpGained: xpGained,
+                            checkpointScores: checkpointScores
                         )
                     }
                 )
@@ -133,6 +148,18 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showGripGuideSheet) {
                 GripEncyclopediaSheet(profile: activeProfile)
+            }
+            .sheet(isPresented: $showProgressSheet) {
+                NavigationStack {
+                    PracticeProgressView(history: practiceHistory, stageRecords: stageRecords)
+                        .navigationTitle("練習進步軌跡")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("完成") { showProgressSheet = false }
+                            }
+                        }
+                }
             }
             .sheet(isPresented: $showPlayerLoginSheet) {
                 PlayerLoginProfileSheet(
@@ -272,7 +299,7 @@ struct ContentView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Label("練習通關徽章 (\(profile.totalPracticeSessions) 次練習)", systemImage: "medal.fill")
+                        Label("關卡通關徽章 (\(profile.totalPracticeSessions) 次)", systemImage: "medal.fill")
                             .font(.caption.weight(.heavy))
                             .foregroundStyle(.yellow)
                         Spacer()
@@ -307,7 +334,7 @@ struct ContentView: View {
                 statPill(
                     icon: "flame.fill",
                     iconColor: .orange,
-                    title: "累計練習",
+                    title: "關卡通關數",
                     value: "\(profile.totalPracticeSessions) 次"
                 )
             }
@@ -448,11 +475,21 @@ struct ContentView: View {
         stars: Int,
         accuracy: Double,
         quizPassed: Bool,
-        xpGained: Int
+        xpGained: Int,
+        checkpointScores: [String: Double]
     ) {
         let profile = activeProfile
         profile.totalXP += xpGained
         profile.totalPracticeSessions += 1
+        modelContext.insert(
+            PracticeHistoryRecord(
+                stageRawValue: stageID.rawValue,
+                accuracy: accuracy,
+                stars: stars,
+                quizPassed: quizPassed,
+                checkpointScores: checkpointScores
+            )
+        )
 
         if let existing = record(for: stageID) {
             existing.stars = max(existing.stars, stars)
@@ -702,5 +739,5 @@ extension GolfStage: Equatable, Hashable {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [PlayerProfile.self, StageRecord.self, Item.self], inMemory: true)
+        .modelContainer(for: [PlayerProfile.self, StageRecord.self, PracticeHistoryRecord.self, Item.self], inMemory: true)
 }

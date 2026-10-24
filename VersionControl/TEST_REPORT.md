@@ -1,10 +1,10 @@
 # Golf 101 揮桿闖關學院 — 自動化測試、Code Review Debug 與生物力學驗證報告 (Test Report)
 
 - **專案名稱**：Golf 101（高爾夫初學者 AI 姿勢訂正闖關遊戲）
-- **測試版本**：`v1.3.0`
-- **測試日期**：2026-10-23
+- **測試版本**：`v1.4.0`
+- **測試日期**：2026-10-24
 - **目標平台**：iOS 26.2 (`arm64-apple-ios26.2-simulator` / Strict `@MainActor` Isolation)
-- **總體結果**：**60 / 60 項斷言全數通過（Pass Rate: 100%，0 Warnings，0 Errors）**
+- **總體結果**：**63 / 63 項斷言全數通過（Pass Rate: 100%，0 Warnings，0 Errors）**
 
 ---
 
@@ -45,10 +45,11 @@
 | **BDG-01** | 練習次數通關徽章解鎖 (`PracticeBadge`) | `0 -> 1 -> 3 -> 5 -> 10 -> 20 次練習` 及 `5 關全通關` | 依序解鎖：初踏果嶺銅章 (1次)、鐵桿練習生銀章 (3次)、球道突破者金章 (5次)、翡翠揮桿大師章 (10次)、大滿貫傳奇王冠 (20次/全通關) | 5 階徽章與進度條完全吻合 | ✅ **PASS** |
 | **AUTH-01** | 空白暱稱／簡介防呆與負數邊界夾限 | `name: "  \n "`, `bio: "  "`, `totalSessions: -5` | 自動回退預設名稱 `高球新星` 與預設簡介，負數練習進度安全歸零 (`0.0`) | 完全吻合 | ✅ **PASS** |
 | **SPEECH-01** | 繁體中文語音指令解析 (`SpeechCommand.parse`) | `"請進入下一步"`, `"完成 　這一步"`, `"教練再說一次"`, `"重新開始練習"`, `"請問語音指令有哪些"`, `"   　\n "` | 依序解析為 `.next`、`.next`、`.repeatTip`、`.restartStep`、`.help`，空白與無關語句回傳 `nil` | 6 項語音解析全數吻合 | ✅ **PASS** |
+| **HIST-01** | 練習進步軌跡與弱項診斷 (`PracticeHistoryRecord`) | `checkpointScores: ["setup_stance": 0.96, "setup_spine": 0.87, "setup_knee": 0.92]` | JSON 正確編解碼 3 項分解動作分數，並穩定選出最低分項目「髖部前傾 (87 分)」作為加強建議 | 3 項軌跡測試全數吻合 | ✅ **PASS** |
 
 ---
 
-## 四、Code Review & Debug 修正紀錄 (`v1.2.1` ~ `v1.3.0`)
+## 四、Code Review & Debug 修正紀錄 (`v1.2.1` ~ `v1.4.0`)
 
 | 編號 | 檔案與位置 | 發現問題 (Issue Identified) | 修正方案 (Resolution) | 狀態 |
 | :---: | :--- | :--- | :--- | :---: |
@@ -59,6 +60,9 @@
 | **CR-05** | [`GolfGameModels.swift`](../Golf101/Models/GolfGameModels.swift) & [`PlayerAuthProfileView.swift`](../Golf101/Views/PlayerAuthProfileView.swift) | 負數經驗值或練習次數可能導致 `GeometryReader` 計算出負數寬度；暱稱／簡介防呆邏輯分散於 View 層 | 抽取 `PlayerProfile.sanitizeName(_:)`、`sanitizeBio(_:)` 與 `applyLoginProfile(...)`，並對 `totalXP` 與 `totalSessions` 加入非負數夾限 | ✅ 已修復 |
 | **CR-06** | [`SpeechCommandListener.swift`](../Golf101/Services/SpeechCommandListener.swift) | 1. 權限非同步等待期間重複點擊麥克風可能重複執行 `installTap(onBus: 0)` 造成 `AVAudioEngine` 崩潰<br>2. 模擬器無輸入聲道 (`sampleRate == 0`) 時直接 `installTap` 會拋出例外<br>3. `stop()` 僅在 `audioEngine.isRunning` 時移除 Tap | 新增 `isStarting` 重入保護、`hasInstalledTap` 狀態追蹤、以及 `format.sampleRate > 0 && format.channelCount > 0` 聲道防禦檢查；強化全形空白與換行符號清理 | ✅ 已修復 |
 | **CR-07** | [`StagePlayView.swift`](../Golf101/Views/StagePlayView.swift) | 定格計時自動過關或進入下一步時，若語音聆聽 (`isListening`) 仍在開啟狀態，會阻擋語音教練播報過關提示且麥克風未自動關閉 | 於 `completeCurrentDrillStep()` 與 `triggerStageClear()` 自動停止語音聆聽，確保過關語音正常播報並釋放麥克風資源 | ✅ 已修復 |
+| **CR-08** | [`PracticeProgressView.swift`](../Golf101/Views/PracticeProgressView.swift) | `trajectoryCard` 單一 `VStack` 內嵌雙層 `ForEach` + 雙 `Chart` 導致 Swift 編譯器型別推論逾時 (`unable to type-check this expression in reasonable time`)，且 `chartForegroundStyleScale` 動態 domain 長度可能與 3 色 range 不一致 | 將 `trajectoryCard` 拆分為 `stagePickerBar`、`selectedStageLineChartSection`、`legacyBestScoresBarChartSection` 並改用攤平之 `flattenedStageChartPoints` 與固定 3 項順序之 `orderedCheckpointIDs(for:)` | ✅ 已修復 |
+| **CR-09** | [`PracticeProgressView.swift`](../Golf101/Views/PracticeProgressView.swift) & [`GolfGameModels.swift`](../Golf101/Models/GolfGameModels.swift) | `focusMovement` 對 `Dictionary<String, Double>` 直接取 `min(by:)`，當兩個分解動作同分時會因 Dictionary 雜湊順序隨機跳動 | 新增 [`PracticeHistoryRecord.lowestCheckpoint(in:)`](../Golf101/Models/GolfGameModels.swift) 以分數優先、Key 字典序次之作決定性排序，並將分數夾限於 `0...100` | ✅ 已修復 |
+| **CR-10** | [`ContentView.swift`](../Golf101/ContentView.swift) | `#Preview` 的 `.modelContainer(for:)` 漏註冊新增的 `PracticeHistoryRecord.self`，在開啟 SwiftUI Preview 時會因未註冊 Schema 崩潰 | 補齊 `[PlayerProfile.self, StageRecord.self, PracticeHistoryRecord.self, Item.self]` | ✅ 已修復 |
 
 ---
 

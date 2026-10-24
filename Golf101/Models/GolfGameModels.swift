@@ -429,7 +429,7 @@ struct PracticeBadge: Identifiable, Equatable, Sendable {
             return "已解鎖"
         }
         let safeSessions = max(0, totalSessions)
-        return "\(safeSessions) / \(requiredSessions) 次練習"
+        return "\(safeSessions) / \(requiredSessions) 次關卡通關"
     }
 
     static let allBadges: [PracticeBadge] = [
@@ -437,7 +437,7 @@ struct PracticeBadge: Identifiable, Equatable, Sendable {
             id: "badge_first_tee",
             title: "初踏果嶺銅章",
             englishSubtitle: "FIRST TEE ROOKIE",
-            description: "完成第 1 次姿勢訂正練習，正式開啟高爾夫揮桿進化之路！",
+            description: "完成第 1 次關卡通關，正式開啟高爾夫揮桿進化之路！",
             requiredSessions: 1,
             requiresAllStagesCleared: false,
             iconName: "flag.fill",
@@ -447,7 +447,7 @@ struct PracticeBadge: Identifiable, Equatable, Sendable {
             id: "badge_range_regular",
             title: "鐵桿練習生銀章",
             englishSubtitle: "RANGE REGULAR",
-            description: "累計完成 3 次練習通關，站姿與握桿肌肉記憶逐漸成形。",
+            description: "累計完成 3 次關卡通關，站姿與握桿肌肉記憶逐漸成形。",
             requiredSessions: 3,
             requiresAllStagesCleared: false,
             iconName: "figure.golf",
@@ -457,7 +457,7 @@ struct PracticeBadge: Identifiable, Equatable, Sendable {
             id: "badge_fairway_breaker",
             title: "球道突破者金章",
             englishSubtitle: "FAIRWAY BREAKER",
-            description: "累計完成 5 次練習通關，徹底告別雞翅膀與重心搖晃！",
+            description: "累計完成 5 次關卡通關，徹底告別雞翅膀與重心搖晃！",
             requiredSessions: 5,
             requiresAllStagesCleared: false,
             iconName: "medal.fill",
@@ -467,7 +467,7 @@ struct PracticeBadge: Identifiable, Equatable, Sendable {
             id: "badge_golden_swing",
             title: "翡翠揮桿大師章",
             englishSubtitle: "EMERALD SWING PRO",
-            description: "累計完成 10 次練習通關，上桿蓄力與下桿釋放如行雲流水。",
+            description: "累計完成 10 次關卡通關，上桿蓄力與下桿釋放如行雲流水。",
             requiredSessions: 10,
             requiresAllStagesCleared: false,
             iconName: "sparkles",
@@ -477,7 +477,7 @@ struct PracticeBadge: Identifiable, Equatable, Sendable {
             id: "badge_grand_slam",
             title: "大滿貫傳奇王冠",
             englishSubtitle: "GRAND SLAM LEGEND",
-            description: "累計完成 20 次練習或全數通過 5 大關卡，榮登高球學院最高殿堂！",
+            description: "累計完成 20 次關卡通關或全數通過 5 大關卡，榮登高球學院最高殿堂！",
             requiredSessions: 20,
             requiresAllStagesCleared: true,
             iconName: "crown.fill",
@@ -523,6 +523,90 @@ final class StageRecord {
 
     var stageID: GolfStageID {
         GolfStageID(rawValue: stageRawValue) ?? .setup
+    }
+}
+
+@Model
+final class PracticeHistoryRecord {
+    var stageRawValue: Int
+    var completedAt: Date
+    var accuracy: Double
+    var stars: Int
+    var quizPassed: Bool
+    var checkpointScoresData: Data
+
+    init(
+        stageRawValue: Int,
+        completedAt: Date = .now,
+        accuracy: Double,
+        stars: Int,
+        quizPassed: Bool,
+        checkpointScores: [String: Double]
+    ) {
+        self.stageRawValue = stageRawValue
+        self.completedAt = completedAt
+        self.accuracy = accuracy
+        self.stars = stars
+        self.quizPassed = quizPassed
+        self.checkpointScoresData = (try? JSONEncoder().encode(checkpointScores)) ?? Data()
+    }
+
+    var checkpointScores: [String: Double] {
+        (try? JSONDecoder().decode([String: Double].self, from: checkpointScoresData)) ?? [:]
+    }
+
+    var stageID: GolfStageID {
+        GolfStageID(rawValue: stageRawValue) ?? .setup
+    }
+
+    static func orderedCheckpointIDs(for stageID: GolfStageID) -> [String] {
+        switch stageID {
+        case .setup:
+            return ["setup_stance", "setup_spine", "setup_knee"]
+        case .grip:
+            return ["grip_v_angle", "grip_connection", "grip_triangle"]
+        case .backswing:
+            return ["backswing_coil", "backswing_arm", "backswing_sway"]
+        case .impact:
+            return ["impact_weight", "impact_lean", "impact_head"]
+        case .finish:
+            return ["finish_balance", "finish_hands", "finish_knee"]
+        }
+    }
+
+    static func movementDetails(for id: String) -> (title: String, cue: String) {
+        switch id {
+        case "setup_stance": return ("站穩底盤", "雙腳張開約與肩同寬，腳掌平均踩穩。")
+        case "setup_spine": return ("髖部前傾", "從髖關節向前折，背部保持自然挺直。")
+        case "setup_knee": return ("膝蓋留彈性", "膝蓋微彎但不蹲低，重心留在足弓。")
+        case "grip_v_angle": return ("對準虎口 V", "雙手虎口自然指向右肩與下巴之間。")
+        case "grip_connection": return ("連結雙手", "讓左右手靠攏，握力保持放鬆。")
+        case "grip_triangle": return ("手臂成三角", "肩膀放鬆，雙手自然垂在身體前方。")
+        case "backswing_coil": return ("胸口帶動啟動", "先轉動胸口與肩膀，讓手臂跟著身體上桿。")
+        case "backswing_arm": return ("上桿保持寬度", "左手臂自然延伸，避免用手肘折起來抬桿。")
+        case "backswing_sway": return ("頂點穩住下盤", "右腳內側踩穩，骨盆轉動但不要往右滑。")
+        case "impact_weight": return ("重心移向左腳", "下桿先讓重心回到左腳，避免留在後腳撈球。")
+        case "impact_lean": return ("雙手領先球位", "擊球時手把略在球前，避免手腕提早翻開。")
+        case "impact_head": return ("頭部保持穩定", "重心前移時讓頭留在球後，不要跟著往前衝。")
+        case "finish_balance": return ("站穩左腳", "收桿時胸口轉向目標，重心穩定落在左腳。")
+        case "finish_hands": return ("完成送桿收桿", "順勢送出雙手，最後自然收在左肩上方。")
+        case "finish_knee": return ("右膝自然靠攏", "右腳跟抬起，以右腳尖輕點地面維持平衡。")
+        default: return ("複習最近關卡", "保持平衡，依照畫面提示調整姿勢。")
+        }
+    }
+
+    static func lowestCheckpoint(in scores: [String: Double]) -> (id: String, title: String, cue: String, scorePercent: Double)? {
+        guard let lowest = scores.min(by: { lhs, rhs in
+            if abs(lhs.value - rhs.value) > 0.0001 {
+                return lhs.value < rhs.value
+            }
+            return lhs.key < rhs.key
+        }) else {
+            return nil
+        }
+        let details = movementDetails(for: lowest.key)
+        let clampedScore = min(100.0, max(0.0, lowest.value * 100.0))
+        return (lowest.key, details.title, details.cue, clampedScore)
     }
 }
 
